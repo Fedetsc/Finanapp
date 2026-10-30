@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Cuentas del hogar",
+    "slug": "cuentas-hogar",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "com.tuusuario.cuentashogar"
+    },
+    "android": {
+      "package": "com.tuusuario.cuentashogar"
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
