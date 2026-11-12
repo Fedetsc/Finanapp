@@ -31,7 +31,6 @@ export default function Login() {
       return;
     }
     window.location.href = "/";
-    router.refresh();
   }
 
   return (
