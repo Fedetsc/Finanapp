@@ -7,6 +7,15 @@ import { fail } from "@/lib/action";
 import { fdate, fmt, toCents, todayAR } from "@/lib/util";
 import Err from "@/components/Err";
 
+async function getUserIdFromMember(memberId: string) {
+  const member = await db.member.findUnique({
+    where: { id: memberId },
+    select: { userId: true },
+  });
+  if (!member) throw new Error("Miembro no encontrado");
+  return member.userId;
+}
+
 async function add(fd: FormData) {
   "use server";
   const m = await requireMember();
@@ -19,9 +28,10 @@ async function add(fd: FormData) {
       db.category.findFirst({ where: { id: f.categoryId, householdId: m.householdId } }),
     ]);
     if (!acc || !cat) throw new Error("Elegí una cuenta y una categoría");
+    const userId = await getUserIdFromMember(m.id);
     await db.$transaction(async (tx) => {
       const t = await tx.transaction.create({ data: { householdId: m.householdId, memberId: m.id, accountId: acc.id, categoryId: cat.id, type: f.type, amount, date: new Date(f.date), description: f.description } });
-      await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "CREATE", entity: "Transaction", entityId: t.id } });
+      await tx.auditLog.create({ data: { householdId: m.householdId, userId, action: "CREATE", entity: "Transaction", entityId: t.id } });
     });
   } catch (e) { fail("/movimientos", e); }
   revalidatePath("/", "layout");
@@ -32,9 +42,10 @@ async function voidTx(fd: FormData) {
   "use server";
   const m = await requireMember();
   const id = String(fd.get("id"));
+  const userId = await getUserIdFromMember(m.id);
   await db.$transaction([
     db.transaction.updateMany({ where: { id, householdId: m.householdId, voidedAt: null }, data: { voidedAt: new Date() } }),
-    db.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "VOID", entity: "Transaction", entityId: id } }),
+    db.auditLog.create({ data: { householdId: m.householdId, userId, action: "VOID", entity: "Transaction", entityId: id } }),
   ]);
   revalidatePath("/", "layout");
 }
