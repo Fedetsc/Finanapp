@@ -23,11 +23,10 @@ export async function requireMember(): Promise<
     select: {
       id: true,
       householdId: true,
+      userId: true,
       role: true,
-      household: {
-        select: { name: true },
-      },
-    }
+      household: { select: { name: true } },
+    },
   });
 
   if (!m) redirect("/login");
