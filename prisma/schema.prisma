@@ -37,6 +37,7 @@ model Member {
   role         String        @default("MEMBER")
   household    Household     @relation(fields: [householdId], references: [id])
   transactions Transaction[]
+   @@index([userId])
   @@index([householdId])
 }
 model Account {

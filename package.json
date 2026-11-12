@@ -2,12 +2,12 @@
   "name": "finanzas-hogar",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "prisma generate && next build",
-    "start": "next start",
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "prisma generate && 【entity-next¦canonical_name=Next】 build",
+    "start": "【entity-next¦canonical_name=Next】 start",
     "test": "vitest run",
     "db:push": "prisma db push",
-    "postinstall": "prisma generate"
+    "postinstall": "【entity-prisma¦canonical_name=Prisma】 generate"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",

@@ -7,7 +7,11 @@ export async function requireMember() {
   const sb = await supabaseServer();
   const { data } = await sb.auth.getUser();
   if (!data.user) redirect("/login");
-  const m = await db.member.findUnique({ where: { userId: data.user.id }, include: { household: true } });
+
+  const m = await db.member.findUnique({
+    where: { userId: data.user.id },
+    select: { id: true, householdId: true, role: true }
+  });
   if (!m) redirect("/onboarding");
   return m;
 }
