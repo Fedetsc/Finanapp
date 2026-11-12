@@ -30,6 +30,8 @@ export default function Login() {
       setLoading(false);
       return;
     }
+    router.push("/");
+    router.refresh();
     window.location.href = "/";
   }
 
