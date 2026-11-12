@@ -8,7 +8,7 @@ async function enter(fd: FormData) {
   const sb = await supabaseServer();
   const { error } = fd.get("mode") === "up" ? await sb.auth.signUp(creds) : await sb.auth.signInWithPassword(creds);
   if (error) redirect(`/login?e=${encodeURIComponent(error.message)}`);
-  const { data } = await supabaseServer().auth.getUser();
+  redirect("/");
 }
 
 export default function Login({ searchParams }: { searchParams: { e?: string } }) {
