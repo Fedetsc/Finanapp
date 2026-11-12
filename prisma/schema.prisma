@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+enum TxType {
+  INCOME
+  EXPENSE
+}
+enum AccountType {
+  BANK
+  SAVINGS
+  PAYROLL
+  WALLET
+  CASH
+  INVESTMENT
+}
+model Household {
+  id           String        @id @default(uuid())
+  name         String
+  currency     String        @default("ARS")
+  inviteCode   String        @unique @default(uuid())
+  createdAt    DateTime      @default(now())
+  members      Member[]
+  accounts     Account[]
+  categories   Category[]
+  transactions Transaction[]
+}
+model Member {
+  id           String        @id @default(uuid())
+  userId       String        @unique
+  householdId  String
+  name         String
+  role         String        @default("MEMBER")
+  household    Household     @relation(fields: [householdId], references: [id])
+  transactions Transaction[]
+  @@index([householdId])
+}
+model Account {
+  id             String        @id @default(uuid())
+  householdId    String
+  name           String
+  type           AccountType
+  openingBalance BigInt        @default(0)
+  createdAt      DateTime      @default(now())
+  household      Household     @relation(fields: [householdId], references: [id])
+  transactions   Transaction[]
+  @@index([householdId])
+}
+model Category {
+  id           String        @id @default(uuid())
+  householdId  String
+  name         String
+  household    Household     @relation(fields: [householdId], references: [id])
+  transactions Transaction[]
+  @@unique([householdId, name])
+}
+model Transaction {
+  id          String    @id @default(uuid())
+  householdId String
+  memberId    String
+  accountId   String
+  categoryId  String
+  type        TxType
+  amount      BigInt
+  date        DateTime  @db.Date
+  description String    @default("")
+  voidedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id])
+  member      Member    @relation(fields: [memberId], references: [id])
+  account     Account   @relation(fields: [accountId], references: [id])
+  category    Category  @relation(fields: [categoryId], references: [id])
+  @@index([householdId, date])
+}
+model AuditLog {
+  id          String   @id @default(uuid())
+  householdId String
+  userId      String
+  action      String
+  entity      String
+  entityId    String
+  createdAt   DateTime @default(now())
+  @@index([householdId, createdAt])
+}

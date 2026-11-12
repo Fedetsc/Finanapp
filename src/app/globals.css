@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --bg: 245 246 248; --surface: 255 255 255; --text: 32 39 51; --muted: 119 128 141; --primary: 51 75 103; --secondary: 100 123 145; --pos: 33 134 91; --neg: 198 83 83; --warn: 217 164 65; --line: 229 232 237; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: 15 19 26; --surface: 24 30 40; --text: 233 237 243; --muted: 140 150 163; --primary: 122 158 196; --secondary: 100 123 145; --pos: 63 178 128; --neg: 224 112 112; --warn: 226 183 98; --line: 42 50 63; }
+}
+body { @apply bg-bg text-text antialiased; }
+@layer components {
+  .card { @apply rounded-xl border border-line bg-surface p-4 shadow-sm; }
+  .btn { @apply rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-surface transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary; }
+  .input { @apply w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm placeholder:text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary; }
+}

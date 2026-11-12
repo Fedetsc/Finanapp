@@ -1,0 +1,16 @@
+export const ACCOUNT_TYPES = { BANK: "Cuenta bancaria", SAVINGS: "Caja de ahorro", PAYROLL: "Cuenta sueldo", WALLET: "Billetera virtual", CASH: "Efectivo", INVESTMENT: "Inversión" } as const;
+
+/** "1.250.000,50" -> 125000050n (centavos). El punto es separador de miles. */
+export function toCents(input: string): bigint {
+  const n = input.trim().replace(/\./g, "").replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(n)) throw new Error("Importe inválido. Ejemplo: 1.250,50");
+  const [i, d = ""] = n.split(".");
+  return BigInt(i) * 100n + BigInt(d.padEnd(2, "0"));
+}
+export function fmt(cents: bigint): string {
+  const neg = cents < 0n;
+  const abs = neg ? -cents : cents;
+  return (neg ? "-$" : "$") + (abs / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + (abs % 100n).toString().padStart(2, "0");
+}
+export const todayAR = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });
+export const fdate = (d: Date) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
