@@ -3,11 +3,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
-    "build": "prisma generate && 【entity-next¦canonical_name=Next】 build",
-    "start": "【entity-next¦canonical_name=Next】 start",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "postinstall": "prisma generate",
     "test": "vitest run",
-    "db:push": "prisma db push",
-    "postinstall": "【entity-prisma¦canonical_name=Prisma】 generate"
+    "db:push": "prisma db push"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",
