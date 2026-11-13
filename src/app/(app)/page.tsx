@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
+import Link from "next/link";
 import { fmt, todayAR } from "@/lib/util";
+import { processDueSubscriptions, refreshInstallments } from "@/lib/billing";
 import Charts from "@/components/Charts";
 
 const Stat = ({ l, v, c }: { l: string; v: string; c?: string }) => (
@@ -11,6 +13,10 @@ export default async function Home() {
   const m = await requireMember();
   const hid = m.householdId;
   const inviteCode = m.household.inviteCode;
+  // Cobros automáticos: las suscripciones vencidas se registran como gasto al entrar al resumen.
+  // Las compras con tarjeta no son movimientos: solo cuentan cuando se paga cada cuota.
+  const [charged] = await Promise.all([processDueSubscriptions(hid), refreshInstallments(hid)]);
+  const awaiting = await db.installment.count({ where: { status: "AWAITING_CONFIRMATION", purchase: { householdId: hid, status: "ACTIVE", card: { ownerMemberId: m.id } } } });
   const now = todayAR().slice(0, 7);
   const keys = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now + "-01T00:00:00Z");
@@ -40,6 +46,8 @@ export default async function Home() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Resumen del mes</h1>
+      {charged > 0 && <p className="rounded-lg border border-line bg-surface p-3 text-sm">Se registraron {charged} cobro(s) de suscripciones. <Link href="/movimientos" className="text-primary underline">Ver movimientos</Link></p>}
+      {awaiting > 0 && <p className="rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm">Tenés {awaiting} cuota(s) de tarjeta esperando confirmación de pago. <Link href="/tarjetas" className="text-primary underline">Ir a tarjetas</Link></p>}
       {members < 2 && (
         <div className="card">
           <p className="text-sm font-medium">Invitá a tu pareja</p>

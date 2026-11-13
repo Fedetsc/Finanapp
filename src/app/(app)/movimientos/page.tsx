@@ -7,6 +7,7 @@ import { fail } from "@/lib/action";
 import { fdate, fmt, parseDate, toCents, todayAR } from "@/lib/util";
 import Err from "@/components/Err";
 import MovementForm from "@/components/MovementForm";
+import { today } from "@/lib/billing";
 
 const base = { amount: z.string(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), accountId: z.string().min(1), description: z.string().trim().max(120) };
 const Form = z.discriminatedUnion("type", [
@@ -59,7 +60,16 @@ async function voidTx(fd: FormData) {
   await db.$transaction(async (tx) => {
     const r = await tx.transaction.updateMany({ where: { id, householdId: m.householdId, voidedAt: null }, data: { voidedAt: new Date() } });
     // Solo auditar si realmente se anuló un movimiento de este hogar.
-    if (r.count === 1) await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "VOID", entity: "Transaction", entityId: id } });
+    if (r.count !== 1) return;
+    await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "VOID", entity: "Transaction", entityId: id } });
+    // Si era el pago de una cuota de tarjeta, la cuota vuelve a quedar impaga.
+    const t = await tx.transaction.findUniqueOrThrow({ where: { id }, include: { installment: true } });
+    if (t.installment) {
+      const i = t.installment;
+      await tx.transaction.update({ where: { id }, data: { installmentId: null } });
+      await tx.installment.update({ where: { id: i.id }, data: { status: i.closingDate < today() ? "AWAITING_CONFIRMATION" : "PENDING", paidWithAccountId: null, paidAt: null } });
+      await tx.creditCardPurchase.update({ where: { id: i.purchaseId }, data: { installmentsPaid: { decrement: 1 }, status: "ACTIVE" } });
+    }
   });
   revalidatePath("/", "layout");
 }

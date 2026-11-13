@@ -23,44 +23,70 @@ enum AccountType {
   INVESTMENT
 }
 
+enum SubscriptionCycle {
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum PurchaseStatus {
+  ACTIVE
+  PAID
+  CANCELLED
+}
+
+enum InstallmentStatus {
+  PENDING
+  AWAITING_CONFIRMATION
+  PAID
+}
+
 model Household {
-  id           String        @id @default(uuid())
-  name         String
-  currency     String        @default("ARS")
-  inviteCode   String        @unique @default(uuid())
-  createdAt    DateTime      @default(now())
-  members      Member[]
-  accounts     Account[]
-  categories   Category[]
-  transactions Transaction[]
+  id            String               @id @default(uuid())
+  name          String
+  currency      String               @default("ARS")
+  inviteCode    String               @unique @default(uuid())
+  createdAt     DateTime             @default(now())
+  members       Member[]
+  accounts      Account[]
+  categories    Category[]
+  transactions  Transaction[]
+  subscriptions Subscription[]
+  creditCards   CreditCard[]
+  cardPurchases CreditCardPurchase[]
 }
 
 model Member {
-  id           String        @id @default(uuid())
-  userId       String        @unique
-  householdId  String
-  name         String
-  role         String        @default("MEMBER")
-  household    Household     @relation(fields: [householdId], references: [id])
-  transactions Transaction[]
-  accounts     Account[]
+  id            String               @id @default(uuid())
+  userId        String               @unique
+  householdId   String
+  name          String
+  role          String               @default("MEMBER")
+  household     Household            @relation(fields: [householdId], references: [id])
+  transactions  Transaction[]
+  accounts      Account[]
+  subscriptions Subscription[]
+  creditCards   CreditCard[]
+  cardPurchases CreditCardPurchase[]
 
   @@index([userId])
   @@index([householdId])
 }
 
 model Account {
-  id             String        @id @default(uuid())
-  householdId    String
-  ownerMemberId  String
-  name           String
-  type           AccountType
-  openingBalance BigInt        @default(0)
-  createdAt      DateTime      @default(now())
-  household      Household     @relation(fields: [householdId], references: [id])
-  owner          Member        @relation(fields: [ownerMemberId], references: [id])
-  transactions   Transaction[] @relation("TxAccount")
-  transfersIn    Transaction[] @relation("TxToAccount")
+  id               String         @id @default(uuid())
+  householdId      String
+  ownerMemberId    String
+  name             String
+  type             AccountType
+  openingBalance   BigInt         @default(0)
+  createdAt        DateTime       @default(now())
+  household        Household      @relation(fields: [householdId], references: [id])
+  owner            Member         @relation(fields: [ownerMemberId], references: [id])
+  transactions     Transaction[]  @relation("TxAccount")
+  transfersIn      Transaction[]  @relation("TxToAccount")
+  subscriptions    Subscription[]
+  paidInstallments Installment[]
 
   @@index([householdId])
   @@index([ownerMemberId])
@@ -77,28 +103,117 @@ model Category {
 }
 
 model Transaction {
-  id          String    @id @default(uuid())
-  householdId String
-  memberId    String
-  accountId   String
+  id             String        @id @default(uuid())
+  householdId    String
+  memberId       String
+  accountId      String
   /// Solo en TRANSFER: cuenta destino (accountId es el origen).
-  toAccountId String?
+  toAccountId    String?
   /// Null en TRANSFER: las transferencias no llevan categoría.
-  categoryId  String?
-  type        TxType
-  amount      BigInt
-  date        DateTime  @db.Date
-  description String    @default("")
-  voidedAt    DateTime?
-  createdAt   DateTime  @default(now())
-  household   Household @relation(fields: [householdId], references: [id])
-  member      Member    @relation(fields: [memberId], references: [id])
-  account     Account   @relation("TxAccount", fields: [accountId], references: [id])
-  toAccount   Account?  @relation("TxToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
-  category    Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryId     String?
+  type           TxType
+  amount         BigInt
+  date           DateTime      @db.Date
+  description    String        @default("")
+  voidedAt       DateTime?
+  createdAt      DateTime      @default(now())
+  household      Household     @relation(fields: [householdId], references: [id])
+  member         Member        @relation(fields: [memberId], references: [id])
+  account        Account       @relation("TxAccount", fields: [accountId], references: [id])
+  toAccount      Account?      @relation("TxToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+  category       Category?     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  /// Cobro automático de una suscripción (único por suscripción + fecha: evita duplicados).
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  /// Pago de una cuota de tarjeta (una cuota no se puede pagar dos veces).
+  installmentId  String?       @unique
+  installment    Installment?  @relation(fields: [installmentId], references: [id], onDelete: Restrict)
 
+  @@unique([subscriptionId, date])
   @@index([householdId, date])
   @@index([toAccountId])
+}
+
+/// Montos en centavos, como Account y Transaction.
+model Subscription {
+  id              String            @id @default(uuid())
+  householdId     String
+  /// Quien la creó y dueño de la cuenta adherida.
+  memberId        String
+  name            String
+  amount          BigInt
+  currency        String            @default("ARS")
+  cycle           SubscriptionCycle
+  nextPaymentDate DateTime          @db.Date
+  accountId       String
+  isActive        Boolean           @default(true)
+  lastChargedDate DateTime?         @db.Date
+  createdAt       DateTime          @default(now())
+  household       Household         @relation(fields: [householdId], references: [id])
+  member          Member            @relation(fields: [memberId], references: [id])
+  account         Account           @relation(fields: [accountId], references: [id])
+  charges         Transaction[]
+
+  @@index([householdId, isActive, nextPaymentDate])
+}
+
+model CreditCard {
+  id            String               @id @default(uuid())
+  householdId   String
+  ownerMemberId String
+  name          String
+  bank          String
+  last4         String?
+  limit         BigInt
+  closingDay    Int
+  dueDay        Int
+  isActive      Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  household     Household            @relation(fields: [householdId], references: [id])
+  owner         Member               @relation(fields: [ownerMemberId], references: [id])
+  purchases     CreditCardPurchase[]
+
+  @@index([householdId])
+}
+
+model CreditCardPurchase {
+  id                String         @id @default(uuid())
+  cardId            String
+  householdId       String
+  memberId          String
+  description       String
+  totalAmount       BigInt
+  installmentsCount Int
+  installmentsPaid  Int            @default(0)
+  purchaseDate      DateTime       @db.Date
+  status            PurchaseStatus @default(ACTIVE)
+  createdAt         DateTime       @default(now())
+  card              CreditCard     @relation(fields: [cardId], references: [id])
+  household         Household      @relation(fields: [householdId], references: [id])
+  member            Member         @relation(fields: [memberId], references: [id])
+  installments      Installment[]
+
+  @@index([cardId])
+  @@index([householdId])
+}
+
+model Installment {
+  id                String             @id @default(uuid())
+  purchaseId        String
+  number            Int
+  amount            BigInt
+  /// Cierre del resumen en el que entra la cuota: después de esta fecha pasa a AWAITING_CONFIRMATION.
+  closingDate       DateTime           @db.Date
+  dueDate           DateTime           @db.Date
+  status            InstallmentStatus  @default(PENDING)
+  paidWithAccountId String?
+  paidAt            DateTime?
+  purchase          CreditCardPurchase @relation(fields: [purchaseId], references: [id])
+  paidWithAccount   Account?           @relation(fields: [paidWithAccountId], references: [id])
+  transaction       Transaction?
+
+  @@unique([purchaseId, number])
+  @@index([status, closingDate])
 }
 
 model AuditLog {

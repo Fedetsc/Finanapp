@@ -4,7 +4,8 @@ import { requireMember } from "@/lib/session";
 import { supabaseServer } from "@/lib/supabase";
 import NavLink from "@/components/NavLink";
 
-const items = [["/", "Inicio"], ["/movimientos", "Movimientos"], ["/cuentas", "Cuentas"], ["/categorias", "Categorías"]];
+// [ruta, etiqueta, etiqueta corta para la barra inferior en celular]
+const items = [["/", "Inicio", "Inicio"], ["/movimientos", "Movimientos", "Movim."], ["/cuentas", "Cuentas", "Cuentas"], ["/tarjetas", "Tarjetas", "Tarjetas"], ["/suscripciones", "Suscripciones", "Suscrip."], ["/categorias", "Categorías", "Categ."]];
 
 async function out() {
   "use server";
@@ -29,7 +30,7 @@ export default async function Shell({ children }: { children: React.ReactNode })
       <main className="mx-auto max-w-5xl p-4 pb-28 md:p-8">{children}</main>
       <Link href="/movimientos#nuevo" aria-label="Registrar movimiento" className="fixed bottom-20 right-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-2xl text-surface shadow-lg md:hidden">+</Link>
       <nav className="fixed inset-x-0 bottom-0 flex border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
-        {items.map(([h, l]) => <NavLink key={h} href={h} cls="flex-1 py-3 text-center text-xs">{l}</NavLink>)}
+        {items.map(([h, , s]) => <NavLink key={h} href={h} cls="min-w-0 flex-1 truncate px-0.5 py-3 text-center text-[11px]">{s}</NavLink>)}
       </nav>
     </div>
   );
