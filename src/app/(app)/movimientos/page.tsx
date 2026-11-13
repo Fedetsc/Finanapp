@@ -15,10 +15,12 @@ async function add(fd: FormData) {
     const amount = toCents(f.amount);
     if (amount <= 0n) throw new Error("El importe debe ser mayor a cero");
     const [acc, cat] = await Promise.all([
-      db.account.findFirst({ where: { id: f.accountId, householdId: m.householdId } }),
+      db.account.findUnique({ where: { id: f.accountId } }),
       db.category.findFirst({ where: { id: f.categoryId, householdId: m.householdId } }),
     ]);
-    if (!acc || !cat) throw new Error("Elegí una cuenta y una categoría");
+    if (!acc || acc.householdId !== m.householdId || !cat) throw new Error("Elegí una cuenta y una categoría");
+    // Las cuentas son personales: aunque se manipule el form, no se puede usar la de otro miembro.
+    if (acc.ownerMemberId !== m.id) throw new Error("No podés usar la cuenta de otro miembro");
     await db.$transaction(async (tx) => {
       const t = await tx.transaction.create({ data: { householdId: m.householdId, memberId: m.id, accountId: acc.id, categoryId: cat.id, type: f.type, amount, date: new Date(f.date + "T00:00:00Z"), description: f.description } });
       await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "CREATE", entity: "Transaction", entityId: t.id } });
@@ -44,7 +46,7 @@ export default async function Movimientos({ searchParams }: { searchParams: { e?
   const m = await requireMember();
   const where = { householdId: m.householdId };
   const [accounts, categories, txs] = await Promise.all([
-    db.account.findMany({ where, orderBy: { name: "asc" } }),
+    db.account.findMany({ where: { ...where, ownerMemberId: m.id }, orderBy: { name: "asc" } }),
     db.category.findMany({ where, orderBy: { name: "asc" } }),
     db.transaction.findMany({ where, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 50, include: { category: true, account: true, member: true } }),
   ]);
@@ -57,7 +59,7 @@ export default async function Movimientos({ searchParams }: { searchParams: { e?
       <Err e={searchParams.e} />
       {searchParams.ok && <p className="rounded-lg border border-pos/40 bg-pos/10 p-3 text-sm text-pos">Movimiento guardado.</p>}
       {accounts.length === 0 ? (
-        <p id="nuevo" className="card text-center text-sm text-muted">Para registrar movimientos, primero <a href="/cuentas" className="text-primary underline">creá una cuenta</a>.</p>
+        <p id="nuevo" className="card text-center text-sm text-muted">Para registrar movimientos, primero <a href="/cuentas" className="text-primary underline">creá una cuenta tuya</a>.</p>
       ) : (
         <form id="nuevo" key={searchParams.ok} action={add} className="card grid gap-3 md:grid-cols-2">
           <div className="grid grid-cols-2 gap-2 md:col-span-2">
