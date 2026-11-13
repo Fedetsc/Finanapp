@@ -23,6 +23,11 @@ enum AccountType {
   INVESTMENT
 }
 
+enum SavingsMovementType {
+  DEPOSIT
+  WITHDRAW
+}
+
 enum SubscriptionCycle {
   WEEKLY
   MONTHLY
@@ -54,6 +59,8 @@ model Household {
   subscriptions Subscription[]
   creditCards   CreditCard[]
   cardPurchases CreditCardPurchase[]
+  savingsVaults SavingsVault[]
+  savingsMoves  SavingsMovement[]
 }
 
 model Member {
@@ -68,25 +75,28 @@ model Member {
   subscriptions Subscription[]
   creditCards   CreditCard[]
   cardPurchases CreditCardPurchase[]
+  savingsVaults SavingsVault[]
+  savingsMoves  SavingsMovement[]
 
   @@index([userId])
   @@index([householdId])
 }
 
 model Account {
-  id               String         @id @default(uuid())
+  id               String            @id @default(uuid())
   householdId      String
   ownerMemberId    String
   name             String
   type             AccountType
-  openingBalance   BigInt         @default(0)
-  createdAt        DateTime       @default(now())
-  household        Household      @relation(fields: [householdId], references: [id])
-  owner            Member         @relation(fields: [ownerMemberId], references: [id])
-  transactions     Transaction[]  @relation("TxAccount")
-  transfersIn      Transaction[]  @relation("TxToAccount")
+  openingBalance   BigInt            @default(0)
+  createdAt        DateTime          @default(now())
+  household        Household         @relation(fields: [householdId], references: [id])
+  owner            Member            @relation(fields: [ownerMemberId], references: [id])
+  transactions     Transaction[]     @relation("TxAccount")
+  transfersIn      Transaction[]     @relation("TxToAccount")
   subscriptions    Subscription[]
   paidInstallments Installment[]
+  savingsMoves     SavingsMovement[]
 
   @@index([householdId])
   @@index([ownerMemberId])
@@ -226,4 +236,44 @@ model AuditLog {
   createdAt   DateTime @default(now())
 
   @@index([householdId, createdAt])
+}
+
+/// Ahorro apartado ("sobre"). Montos en centavos. currentAmount = depósitos - retiros.
+model SavingsVault {
+  id            String            @id @default(uuid())
+  householdId   String
+  /// Quien lo creó: el único que puede apartar y retirar.
+  memberId      String
+  name          String
+  targetAmount  BigInt?
+  currentAmount BigInt            @default(0)
+  emoji         String?
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  household     Household         @relation(fields: [householdId], references: [id])
+  member        Member            @relation(fields: [memberId], references: [id])
+  movements     SavingsMovement[]
+
+  @@unique([householdId, name])
+}
+
+/// Apartar (DEPOSIT: cuenta -> sobre) o retirar (WITHDRAW: sobre -> cuenta). No es ingreso ni gasto.
+model SavingsMovement {
+  id          String              @id @default(uuid())
+  vaultId     String
+  householdId String
+  memberId    String
+  accountId   String
+  type        SavingsMovementType
+  amount      BigInt
+  date        DateTime            @db.Date
+  description String              @default("")
+  createdAt   DateTime            @default(now())
+  vault       SavingsVault        @relation(fields: [vaultId], references: [id])
+  household   Household           @relation(fields: [householdId], references: [id])
+  member      Member              @relation(fields: [memberId], references: [id])
+  account     Account             @relation(fields: [accountId], references: [id])
+
+  @@index([vaultId, date])
+  @@index([accountId])
 }

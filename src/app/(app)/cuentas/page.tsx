@@ -7,6 +7,7 @@ import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
 import { ACCOUNT_TYPES, fmt, toCents } from "@/lib/util";
 import Err from "@/components/Err";
+import { accountBalances } from "@/lib/balances";
 
 async function add(fd: FormData) {
   "use server";
@@ -24,17 +25,13 @@ async function add(fd: FormData) {
 export default async function Cuentas({ searchParams }: { searchParams: { e?: string; ok?: string; ver?: string } }) {
   const m = await requireMember();
   const where = { householdId: m.householdId };
-  const [accs, sums, incoming, members] = await Promise.all([
+  const [accs, balances, members] = await Promise.all([
     db.account.findMany({ where, orderBy: { createdAt: "asc" } }),
-    // accountId: ingresos suman; gastos y transferencias salientes restan.
-    db.transaction.groupBy({ by: ["accountId", "type"], where: { ...where, voidedAt: null }, _sum: { amount: true } }),
-    // toAccountId: transferencias entrantes suman en la cuenta destino.
-    db.transaction.groupBy({ by: ["toAccountId"], where: { ...where, voidedAt: null, type: "TRANSFER" }, _sum: { amount: true } }),
+    // Incluye transferencias y lo apartado/retirado de ahorro.
+    accountBalances(m.householdId),
     db.member.findMany({ where, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
-  const balance = (id: string, opening: bigint) =>
-    sums.filter((s) => s.accountId === id).reduce((t, s) => t + (s.type === "INCOME" ? 1n : -1n) * (s._sum.amount ?? 0n), opening) +
-    (incoming.find((s) => s.toAccountId === id)?._sum.amount ?? 0n);
+  const balance = (id: string, opening: bigint) => balances.get(id) ?? opening;
 
   const others = members.filter((x) => x.id !== m.id);
   const nameOf = new Map(members.map((x) => [x.id, x.name]));

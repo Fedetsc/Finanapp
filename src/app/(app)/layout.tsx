@@ -5,7 +5,7 @@ import { supabaseServer } from "@/lib/supabase";
 import NavLink from "@/components/NavLink";
 
 // [ruta, etiqueta, etiqueta corta para la barra inferior en celular]
-const items = [["/", "Inicio", "Inicio"], ["/movimientos", "Movimientos", "Movim."], ["/cuentas", "Cuentas", "Cuentas"], ["/tarjetas", "Tarjetas", "Tarjetas"], ["/suscripciones", "Suscripciones", "Suscrip."], ["/categorias", "Categorías", "Categ."]];
+const items = [["/", "Inicio", "Inicio"], ["/movimientos", "Movimientos", "Movim."], ["/cuentas", "Cuentas", "Cuentas"], ["/ahorro", "Ahorro", "Ahorro"], ["/tarjetas", "Tarjetas", "Tarjetas"], ["/suscripciones", "Suscripciones", "Suscrip."], ["/categorias", "Categorías", "Categ."]];
 
 async function out() {
   "use server";
