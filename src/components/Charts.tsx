@@ -1,12 +1,10 @@
 "use client";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-/** Paleta por categoría; el servidor asigna el color para que una categoría tenga el mismo en todos los gráficos. */
-export const COLORS = ["#334B67", "#647B91", "#21865B", "#D9A441", "#C65353", "#8FA3B8", "#5E9C85", "#B5A07A"];
+import type { Slice } from "@/lib/colors";
+
 const tip = { contentStyle: { background: "rgb(var(--surface))", border: "1px solid rgb(var(--line))", borderRadius: 8, fontSize: 12 }, itemStyle: { color: "rgb(var(--text))" } };
 const money = (v: unknown) => "$" + Number(v).toLocaleString("es-AR");
-
-export type Slice = { name: string; value: number; color: string };
 
 export function CategoryDonut({ pie, empty, height = "h-64" }: { pie: Slice[]; empty: string; height?: string }) {
   if (!pie.length) return <p className="py-16 text-center text-sm text-muted">{empty}</p>;

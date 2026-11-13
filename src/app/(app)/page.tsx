@@ -4,7 +4,8 @@ import { requireMember } from "@/lib/session";
 import { fmt, todayAR } from "@/lib/util";
 import { processDueSubscriptions, refreshInstallments } from "@/lib/billing";
 import { accountBalances } from "@/lib/balances";
-import Charts, { CategoryDonut, COLORS, type Slice } from "@/components/Charts";
+import Charts, { CategoryDonut } from "@/components/Charts";
+import { COLORS, type Slice } from "@/lib/colors";
 
 const Stat = ({ l, v, c, hint }: { l: string; v: string; c?: string; hint?: string }) => (
   <div className="card">
@@ -29,24 +30,23 @@ export default async function Home() {
     d.setUTCMonth(d.getUTCMonth() - (5 - i));
     return d.toISOString().slice(0, 7);
   });
-  const [txs, balances, vaults, members, awaiting] = await Promise.all([
+  const [txs, balances, vaults, members] = await Promise.all([
     db.transaction.findMany({ where: { householdId: hid, voidedAt: null, date: { gte: new Date(keys[0] + "-01T00:00:00Z") } }, select: { type: true, amount: true, memberId: true, date: true, category: { select: { name: true } } } }),
     accountBalances(hid),
-    db.savingsVault.aggregate({ where: { householdId: hid }, _sum: { currentAmount: true } }),
+    db.$queryRaw<{ total: bigint | null }[]>`SELECT COALESCE(SUM("currentAmount"), 0)::bigint AS total FROM "SavingsVault" WHERE "householdId" = ${hid}`,
     db.member.findMany({ where: { householdId: hid }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    db.installment.count({ where: { status: "AWAITING_CONFIRMATION", purchase: { householdId: hid, status: "ACTIVE", card: { ownerMemberId: m.id } } } }),
   ]);
 
   // Disponible = suma de los saldos de todas las cuentas (ya descuentan lo apartado y suman lo retirado).
   // Ahorrado = suma de los sobres. Saldo total = Disponible + Ahorrado: apartar no cambia el total.
   const disponible = [...balances.values()].reduce((a, b) => a + b, 0n);
-  const ahorrado = vaults._sum.currentAmount ?? 0n;
+  const ahorrado = vaults[0]?.total ?? 0n;
   const total = disponible + ahorrado;
 
   // Ingresos/gastos solo leen Transaction INCOME/EXPENSE: transferencias y ahorro quedan afuera.
   const inMonth = (k: string) => (x: Tx) => x.date.toISOString().startsWith(k);
   const sum = (list: Tx[], t: string) => list.filter((x) => x.type === t).reduce((a, x) => a + x.amount, 0n);
-  const monthTx = txs.filter(inMonth(now));
+  const monthTx: Tx[] = txs.filter(inMonth(now));
   const bars = keys.map((k) => { const l = txs.filter(inMonth(k)); return { mes: k.slice(5) + "/" + k.slice(2, 4), Ingresos: Number(sum(l, "INCOME")) / 100, Gastos: Number(sum(l, "EXPENSE")) / 100 }; });
   const inc = sum(monthTx, "INCOME"), exp = sum(monthTx, "EXPENSE"), trf = sum(monthTx, "TRANSFER");
   const trfCount = monthTx.filter((x) => x.type === "TRANSFER").length;
@@ -62,7 +62,8 @@ export default async function Home() {
   const slices = (cats: [string, bigint][]): Slice[] => cats.map(([name, v]) => ({ name, value: Number(v) / 100, color: colorOf.get(name) ?? COLORS[0] }));
 
   // Un bloque por miembro: primero yo, después cada uno de los demás. La suma de todos = total del hogar.
-  const people = [...members.filter((x) => x.id === m.id), ...members.filter((x) => x.id !== m.id)].map((p) => {
+  const memberList = members as { id: string; name: string }[];
+  const people = [...memberList.filter((x) => x.id === m.id), ...memberList.filter((x) => x.id !== m.id)].map((p) => {
     const mine = monthTx.filter((x) => x.memberId === p.id);
     return { ...p, me: p.id === m.id, inc: sum(mine, "INCOME"), exp: sum(mine, "EXPENSE"), pie: slices(byCategory(mine)) };
   });
@@ -71,7 +72,6 @@ export default async function Home() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Resumen del mes</h1>
       {charged > 0 && <p className="rounded-lg border border-line bg-surface p-3 text-sm">Se registraron {charged} cobro(s) de suscripciones. <Link href="/movimientos" className="text-primary underline">Ver movimientos</Link></p>}
-      {awaiting > 0 && <p className="rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm">Tenés {awaiting} cuota(s) de tarjeta esperando confirmación de pago. <Link href="/tarjetas" className="text-primary underline">Ir a tarjetas</Link></p>}
       {members.length < 2 && (
         <div className="card">
           <p className="text-sm font-medium">Invitá a tu pareja</p>
