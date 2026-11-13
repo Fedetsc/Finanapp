@@ -8,8 +8,7 @@ const items = [["/", "Inicio"], ["/movimientos", "Movimientos"], ["/cuentas", "C
 
 async function out() {
   "use server";
-  const sb = await supabaseServer();
-  const { data } = await sb.auth.getUser();
+  await supabaseServer().auth.signOut();
   redirect("/login");
 }
 

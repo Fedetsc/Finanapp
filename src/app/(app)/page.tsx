@@ -10,6 +10,7 @@ const Stat = ({ l, v, c }: { l: string; v: string; c?: string }) => (
 export default async function Home() {
   const m = await requireMember();
   const hid = m.householdId;
+  const inviteCode = m.household.inviteCode;
   const now = todayAR().slice(0, 7);
   const keys = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now + "-01T00:00:00Z");
@@ -38,7 +39,7 @@ export default async function Home() {
         <div className="card">
           <p className="text-sm font-medium">Invitá a tu pareja</p>
           <p className="mt-1 text-xs text-muted">Que cree su cuenta, elija «Unirme con un código» y use este código:</p>
-          <p className="mt-2 select-all break-all rounded-lg bg-bg p-2 font-mono text-sm">{m.household.inviteCode}</p>
+          <p className="mt-2 select-all break-all rounded-lg bg-bg p-2 font-mono text-sm">{inviteCode}</p>
         </div>
       )}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

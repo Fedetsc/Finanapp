@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Solo refresca la sesión de Supabase y persiste las cookies renovadas.
+ * No redirige: de eso se encargan requireMember() y la página de onboarding.
+ */
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({ request: req });
   const sb = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
@@ -13,10 +17,8 @@ export async function middleware(req: NextRequest) {
       },
     },
   });
-
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user && req.nextUrl.pathname !== "/" && !req.nextUrl.pathname.startsWith("/login")) return NextResponse.redirect(new URL("/", req.url));
+  await sb.auth.getUser();
   return res;
 }
 
-export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"] };
+export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"] };

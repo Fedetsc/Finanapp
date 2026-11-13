@@ -7,15 +7,6 @@ import { fail } from "@/lib/action";
 import { fdate, fmt, toCents, todayAR } from "@/lib/util";
 import Err from "@/components/Err";
 
-async function getUserIdFromMember(memberId: string) {
-  const member = await db.member.findUnique({
-    where: { id: memberId },
-    select: { userId: true },
-  });
-  if (!member) throw new Error("Miembro no encontrado");
-  return member.userId;
-}
-
 async function add(fd: FormData) {
   "use server";
   const m = await requireMember();
@@ -28,10 +19,9 @@ async function add(fd: FormData) {
       db.category.findFirst({ where: { id: f.categoryId, householdId: m.householdId } }),
     ]);
     if (!acc || !cat) throw new Error("Elegí una cuenta y una categoría");
-    const userId = await getUserIdFromMember(m.id);
     await db.$transaction(async (tx) => {
-      const t = await tx.transaction.create({ data: { householdId: m.householdId, memberId: m.id, accountId: acc.id, categoryId: cat.id, type: f.type, amount, date: new Date(f.date), description: f.description } });
-      await tx.auditLog.create({ data: { householdId: m.householdId, userId, action: "CREATE", entity: "Transaction", entityId: t.id } });
+      const t = await tx.transaction.create({ data: { householdId: m.householdId, memberId: m.id, accountId: acc.id, categoryId: cat.id, type: f.type, amount, date: new Date(f.date + "T00:00:00Z"), description: f.description } });
+      await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "CREATE", entity: "Transaction", entityId: t.id } });
     });
   } catch (e) { fail("/movimientos", e); }
   revalidatePath("/", "layout");
@@ -42,11 +32,11 @@ async function voidTx(fd: FormData) {
   "use server";
   const m = await requireMember();
   const id = String(fd.get("id"));
-  const userId = await getUserIdFromMember(m.id);
-  await db.$transaction([
-    db.transaction.updateMany({ where: { id, householdId: m.householdId, voidedAt: null }, data: { voidedAt: new Date() } }),
-    db.auditLog.create({ data: { householdId: m.householdId, userId, action: "VOID", entity: "Transaction", entityId: id } }),
-  ]);
+  await db.$transaction(async (tx) => {
+    const r = await tx.transaction.updateMany({ where: { id, householdId: m.householdId, voidedAt: null }, data: { voidedAt: new Date() } });
+    // Solo auditar si realmente se anuló un movimiento de este hogar.
+    if (r.count === 1) await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "VOID", entity: "Transaction", entityId: id } });
+  });
   revalidatePath("/", "layout");
 }
 
@@ -77,7 +67,7 @@ export default async function Movimientos({ searchParams }: { searchParams: { e?
           <input name="amount" required inputMode="decimal" placeholder="Importe (ej. 12.500,00)" className="input" />
           <input name="date" type="date" required defaultValue={todayAR()} className="input" />
           <select name="accountId" required className="input">{accounts.map(opt)}</select>
-          <select name="categoryId" required className="input">{categories.map(opt)}</select>
+          <select name="categoryId" required className="input">{categories.length ? categories.map(opt) : <option value="">Primero creá una categoría</option>}</select>
           <input name="description" maxLength={120} placeholder="Descripción (opcional)" className="input md:col-span-2" />
           <button className="btn md:col-span-2">Guardar movimiento</button>
         </form>
