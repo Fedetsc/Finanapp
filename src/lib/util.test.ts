@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmt, toCents } from "./util";
+import { fmt, parseDate, toCents } from "./util";
 
 describe("dinero", () => {
   it("convierte importes argentinos a centavos", () => {
@@ -25,5 +25,17 @@ describe("dinero", () => {
   it("formatea sin errores de precisión", () => {
     expect(fmt(125000000n)).toBe("$1.250.000,00");
     expect(fmt(-5n)).toBe("-$0,05");
+  });
+});
+
+describe("fechas", () => {
+  it("acepta fechas válidas", () => {
+    expect(parseDate("2026-11-13").toISOString()).toBe("2026-11-13T00:00:00.000Z");
+    expect(parseDate("2028-02-29").toISOString()).toBe("2028-02-29T00:00:00.000Z");
+  });
+  it("rechaza fechas inexistentes o mal formadas", () => {
+    expect(() => parseDate("2026-02-31")).toThrow();
+    expect(() => parseDate("2026-13-01")).toThrow();
+    expect(() => parseDate("13/11/2026")).toThrow();
   });
 });

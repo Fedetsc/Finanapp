@@ -11,6 +11,7 @@ datasource db {
 enum TxType {
   INCOME
   EXPENSE
+  TRANSFER
 }
 
 enum AccountType {
@@ -58,7 +59,8 @@ model Account {
   createdAt      DateTime      @default(now())
   household      Household     @relation(fields: [householdId], references: [id])
   owner          Member        @relation(fields: [ownerMemberId], references: [id])
-  transactions   Transaction[]
+  transactions   Transaction[] @relation("TxAccount")
+  transfersIn    Transaction[] @relation("TxToAccount")
 
   @@index([householdId])
   @@index([ownerMemberId])
@@ -79,7 +81,10 @@ model Transaction {
   householdId String
   memberId    String
   accountId   String
-  categoryId  String
+  /// Solo en TRANSFER: cuenta destino (accountId es el origen).
+  toAccountId String?
+  /// Null en TRANSFER: las transferencias no llevan categoría.
+  categoryId  String?
   type        TxType
   amount      BigInt
   date        DateTime  @db.Date
@@ -88,10 +93,12 @@ model Transaction {
   createdAt   DateTime  @default(now())
   household   Household @relation(fields: [householdId], references: [id])
   member      Member    @relation(fields: [memberId], references: [id])
-  account     Account   @relation(fields: [accountId], references: [id])
-  category    Category  @relation(fields: [categoryId], references: [id])
+  account     Account   @relation("TxAccount", fields: [accountId], references: [id])
+  toAccount   Account?  @relation("TxToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   @@index([householdId, date])
+  @@index([toAccountId])
 }
 
 model AuditLog {

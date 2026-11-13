@@ -21,3 +21,9 @@ export function fmt(cents: bigint): string {
 }
 export const todayAR = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });
 export const fdate = (d: Date) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
+/** "AAAA-MM-DD" válido (rechaza 2026-02-31) -> Date a medianoche UTC. */
+export function parseDate(s: string): Date {
+  const d = new Date(s + "T00:00:00Z");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) throw new Error("La fecha no es válida");
+  return d;
+}

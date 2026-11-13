@@ -24,12 +24,17 @@ export default async function Home() {
     db.member.count({ where: { householdId: hid } }),
   ]);
   const all = (t: string) => totals.find((x) => x.type === t)?._sum.amount ?? 0n;
+  // Las transferencias (TRANSFER) son internas al hogar: no cambian el saldo total ni cuentan como ingreso/gasto.
   const total = (opening._sum.openingBalance ?? 0n) + all("INCOME") - all("EXPENSE");
   const month = (k: string, t: string) => txs.filter((x) => x.type === t && x.date.toISOString().startsWith(k)).reduce((a, x) => a + x.amount, 0n);
   const bars = keys.map((k) => ({ mes: k.slice(5) + "/" + k.slice(2, 4), Ingresos: Number(month(k, "INCOME")) / 100, Gastos: Number(month(k, "EXPENSE")) / 100 }));
-  const inc = month(now, "INCOME"), exp = month(now, "EXPENSE");
+  const inc = month(now, "INCOME"), exp = month(now, "EXPENSE"), trf = month(now, "TRANSFER");
+  const trfCount = txs.filter((x) => x.type === "TRANSFER" && x.date.toISOString().startsWith(now)).length;
   const byCat = new Map<string, number>();
-  txs.filter((x) => x.type === "EXPENSE" && x.date.toISOString().startsWith(now)).forEach((x) => byCat.set(x.category.name, (byCat.get(x.category.name) ?? 0) + Number(x.amount) / 100));
+  txs.filter((x) => x.type === "EXPENSE" && x.date.toISOString().startsWith(now)).forEach((x) => {
+    const name = x.category?.name ?? "Sin categoría";
+    byCat.set(name, (byCat.get(name) ?? 0) + Number(x.amount) / 100);
+  });
   const pie = [...byCat].map(([name, value]) => ({ name, value }));
 
   return (
@@ -48,6 +53,11 @@ export default async function Home() {
         <Stat l="Gastos del mes" v={fmt(exp)} c="text-neg" />
         <Stat l="Balance mensual" v={fmt(inc - exp)} c={inc >= exp ? "text-pos" : "text-neg"} />
       </div>
+      {trfCount > 0 && (
+        <p className="text-xs text-muted">
+          Transferencias del mes: {fmt(trf)} en {trfCount} {trfCount === 1 ? "movimiento" : "movimientos"}. No cuentan como ingreso ni gasto.
+        </p>
+      )}
       <Charts bars={bars} pie={pie} />
     </div>
   );
