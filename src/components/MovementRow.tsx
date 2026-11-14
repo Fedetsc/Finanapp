@@ -1,6 +1,7 @@
 import { money } from "@/lib/currency";
 import { categoryVisual } from "@/lib/visuals";
 import { Icon, IconTile } from "./ui";
+import Amt from "./Amt";
 
 export type RowTx = {
   id: string;
@@ -25,8 +26,8 @@ export default function MovementRow({ t, when, chips = false, action }: { t: Row
   const title = transfer ? (t.description && t.description !== "Transferencia" ? t.description : "Transferencia") : t.description || t.category?.name || "Movimiento";
   const account = transfer ? `${t.account.name} → ${t.toAccount?.name ?? "?"}` : t.account.name;
   const voided = !!t.voidedAt;
-  const color = voided ? "text-muted line-through" : transfer ? "text-primary" : t.type === "INCOME" ? "text-pos" : "text-neg";
-  const sign = transfer ? "" : t.type === "INCOME" ? "+" : "-";
+  const color = voided ? "text-muted line-through" : transfer ? "text-primary" : t.type === "INCOME" || t.type === "YIELD" ? "text-pos" : "text-neg";
+  const sign = transfer ? "" : t.type === "INCOME" || t.type === "YIELD" ? "+" : "-";
   // Transferencia entre monedas distintas: también se muestra lo que llegó a destino.
   const fx = transfer && t.toAccount && t.toAccount.currency !== t.account.currency && t.toAmount != null;
 
@@ -38,6 +39,7 @@ export default function MovementRow({ t, when, chips = false, action }: { t: Row
         {chips ? (
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {transfer && <span className="chip bg-[#EAF3FB] text-[#1E6FB8]">Transferencia</span>}
+            {t.type === "YIELD" && <span className="chip bg-mint-soft text-pos">Rendimiento</span>}
             <span className="chip text-text/70">{t.member.name}</span>
             <span className="chip"><Icon name={transfer ? "transfer" : "bank"} className="h-3 w-3" />{account}</span>
             {!transfer && t.category && t.description && <span className="chip">{t.category.name}</span>}
@@ -48,8 +50,8 @@ export default function MovementRow({ t, when, chips = false, action }: { t: Row
         )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-0.5">
-        <span className={`text-[15px] font-bold tabular-nums ${color}`}>{sign}{money(t.amount, t.account.currency)}</span>
-        {fx && <span className="text-[11px] text-muted tabular-nums">→ {money(t.toAmount!, t.toAccount!.currency)}</span>}
+        <span className={`text-[15px] font-bold tabular-nums ${color}`}>{sign}<Amt c={t.account.currency}>{money(t.amount, t.account.currency)}</Amt></span>
+        {fx && <span className="text-[11px] text-muted tabular-nums">→ <Amt c={t.toAccount!.currency}>{money(t.toAmount!, t.toAccount!.currency)}</Amt></span>}
         {action}
       </div>
     </div>

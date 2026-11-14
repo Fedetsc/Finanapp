@@ -4,13 +4,16 @@ import { requireMember } from "@/lib/session";
 import { fmt, todayAR } from "@/lib/util";
 import { processDueSubscriptions, refreshInstallments } from "@/lib/billing";
 import { accountBalances } from "@/lib/balances";
-import { monthLabel, relDay } from "@/lib/visuals";
+import { monthLabel } from "@/lib/visuals";
 import Charts, { CategoryDonut } from "@/components/Charts";
 import { COLORS, type Slice } from "@/lib/chart-colors";
-import MovementRow from "@/components/MovementRow";
+import HideAmountsToggle from "@/components/HideAmounts";
 import { currencyName, money } from "@/lib/currency";
+import { arsEquivalent, referenceRates } from "@/lib/rates";
+import { accrueYields } from "@/lib/yields";
 import CopyButton from "@/components/CopyButton";
 import { AvatarStack, Avatar, HeroCard, Icon, IconTile, Notice, SectionHeader } from "@/components/ui";
+import Amt, { MASK } from "@/components/Amt";
 
 type Tx = { type: string; amount: bigint; memberId: string; date: Date; category: { name: string } | null };
 
@@ -19,7 +22,8 @@ export default async function Home() {
   const hid = m.householdId;
   // Cobros automáticos: las suscripciones vencidas se registran como gasto al entrar al resumen.
   // Las compras con tarjeta no son movimientos: solo cuentan cuando se paga cada cuota.
-  const [charged] = await Promise.all([processDueSubscriptions(hid), refreshInstallments(hid)]);
+  // Rendimientos: si el cron no corrió, se acreditan los días pendientes al entrar.
+  const [charged] = await Promise.all([processDueSubscriptions(hid), refreshInstallments(hid), accrueYields(hid)]);
 
   const today = todayAR();
   const now = today.slice(0, 7); // mes actual: mismo filtro para el bloque total y los de cada miembro
@@ -29,16 +33,16 @@ export default async function Home() {
     return d.toISOString().slice(0, 7);
   });
   const monthStart = new Date(now + "-01T00:00:00Z");
-  const [txs, balances, vaults, members, recent, accs, foreignTx] = await Promise.all([
+  const [txs, balances, vaults, members, accs, foreignTx, rates] = await Promise.all([
     // Ingresos, gastos y gráficos: solo cuentas en ARS (no se mezclan monedas ni se convierte nada).
     db.transaction.findMany({ where: { householdId: hid, voidedAt: null, account: { currency: "ARS" }, date: { gte: new Date(keys[0] + "-01T00:00:00Z") } }, select: { type: true, amount: true, memberId: true, date: true, category: { select: { name: true } } } }),
     accountBalances(hid),
     db.$queryRaw<{ total: bigint | null }[]>`SELECT COALESCE(SUM("currentAmount"), 0)::bigint AS total FROM "SavingsVault" WHERE "householdId" = ${hid}`,
     db.member.findMany({ where: { householdId: hid }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    db.transaction.findMany({ where: { householdId: hid, voidedAt: null }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 5, include: { category: { select: { name: true } }, account: { select: { name: true, currency: true } }, toAccount: { select: { name: true, currency: true } }, member: { select: { name: true } } } }),
     db.account.findMany({ where: { householdId: hid }, select: { id: true, currency: true } }),
     // Ingresos y gastos del mes en otras monedas: se muestran aparte, cada uno en su moneda.
     db.transaction.findMany({ where: { householdId: hid, voidedAt: null, type: { in: ["INCOME", "EXPENSE"] }, account: { currency: { not: "ARS" } }, date: { gte: monthStart } }, select: { type: true, amount: true, account: { select: { currency: true } } } }),
+    referenceRates(hid),
   ]);
 
   // Saldos agrupados por moneda: nunca se suman monedas distintas.
@@ -108,19 +112,25 @@ export default async function Home() {
       )}
 
       <HeroCard>
-        <p className="text-sm text-white/70">{foreignTotals.length ? "Total ARS" : "Saldo total"}</p>
-        <p className="mt-1 text-[40px] font-extrabold leading-none tracking-tight tabular-nums">{fmt(total)}</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-white/70">{foreignTotals.length ? "Total ARS" : "Saldo total"}</p>
+          <HideAmountsToggle tone="light" />
+        </div>
+        <p className="mt-1 text-[40px] font-extrabold leading-none tracking-tight tabular-nums"><Amt>{fmt(total)}</Amt></p>
         <span className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${balance >= 0n ? "bg-mint/20 text-mint" : "bg-[#FDECEE]/20 text-[#FFB3B6]"}`}>
-          <Icon name="trend" className="h-3.5 w-3.5" />{balance >= 0n ? "+" : ""}{fmt(balance)} este mes
+          <Icon name="trend" className="h-3.5 w-3.5" />{balance >= 0n ? "+" : ""}<Amt>{fmt(balance)}</Amt> este mes
         </span>
         <dl className="mt-5 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-white/10 px-3.5 py-2.5"><dt className="text-[11px] text-white/60">Disponible para gastar</dt><dd className="font-bold tabular-nums">{fmt(disponible)}</dd></div>
-          <div className="rounded-2xl bg-white/10 px-3.5 py-2.5"><dt className="text-[11px] text-white/60">Ahorrado</dt><dd className="font-bold tabular-nums">{fmt(ahorrado)}</dd></div>
+          <div className="rounded-2xl bg-white/10 px-3.5 py-2.5"><dt className="text-[11px] text-white/60">Disponible para gastar</dt><dd className="font-bold tabular-nums"><Amt>{fmt(disponible)}</Amt></dd></div>
+          <div className="rounded-2xl bg-white/10 px-3.5 py-2.5"><dt className="text-[11px] text-white/60">Ahorrado</dt><dd className="font-bold tabular-nums"><Amt>{fmt(ahorrado)}</Amt></dd></div>
         </dl>
         {foreignTotals.length > 0 && (
           <dl className="mt-3 space-y-1.5 border-t border-white/15 pt-3">
             {foreignTotals.map(([c, v]) => (
-              <div key={c} className="flex items-baseline justify-between gap-3"><dt className="text-sm text-white/70">Total {currencyName(c)}</dt><dd className="font-bold tabular-nums">{money(v, c)}</dd></div>
+              <div key={c} className="flex items-baseline justify-between gap-3">
+                <dt className="text-sm text-white/70">Total {currencyName(c)}</dt>
+                <dd className="text-right"><span className="block font-bold tabular-nums"><Amt c={c}>{money(v, c)}</Amt></span>{arsEquivalent(v, c, rates) && <span className="block text-[11px] text-white/60 tabular-nums"><Amt mask={`≈ $ ${MASK}`}>{arsEquivalent(v, c, rates)}</Amt></span>}</dd>
+              </div>
             ))}
           </dl>
         )}
@@ -130,12 +140,12 @@ export default async function Home() {
         <div className="card">
           <IconTile icon="down" tone="green" size="sm" />
           <p className="mt-4 text-sm text-muted">Ingresos</p>
-          <p className="text-xl font-extrabold tracking-tight tabular-nums">{fmt(inc)}</p>
+          <p className="text-xl font-extrabold tracking-tight tabular-nums"><Amt>{fmt(inc)}</Amt></p>
         </div>
         <div className="card">
           <IconTile icon="up" tone="blue" size="sm" />
           <p className="mt-4 text-sm text-muted">Gastos</p>
-          <p className="text-xl font-extrabold tracking-tight tabular-nums">{fmt(exp)}</p>
+          <p className="text-xl font-extrabold tracking-tight tabular-nums"><Amt>{fmt(exp)}</Amt></p>
         </div>
       </div>
 
@@ -151,31 +161,22 @@ export default async function Home() {
             <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-bg" role="progressbar" aria-valuenow={usedPct} aria-valuemin={0} aria-valuemax={100} aria-label="Porcentaje de ingresos gastado">
               <div className={`h-full rounded-full ${usedPct > 100 ? "bg-neg" : "bg-gradient-to-r from-mint to-pos"}`} style={{ width: `${Math.min(100, usedPct)}%` }} />
             </div>
-            <p className="mt-3 text-sm text-muted">Gastado <b className="text-text">{fmt(exp)}</b> / {fmt(inc)}</p>
-            <p className="mt-0.5 text-xs text-muted">{balance >= 0n ? `Van bien: les quedan ${fmt(balance)} este mes 🌿` : `Se pasaron ${fmt(-balance)} de lo que entró este mes.`}</p>
+            <p className="mt-3 text-sm text-muted">Gastado <b className="text-text"><Amt>{fmt(exp)}</Amt></b> / <Amt>{fmt(inc)}</Amt></p>
+            <p className="mt-0.5 text-xs text-muted">{balance >= 0n ? <>Van bien: les quedan <Amt>{fmt(balance)}</Amt> este mes 🌿</> : <>Se pasaron <Amt>{fmt(-balance)}</Amt> de lo que entró este mes.</>}</p>
           </>
         )}
       </div>
       {(trfCount > 0 || ahorrado > 0n) && (
         <p className="mt-3 px-1 text-xs text-muted">
-          {trfCount > 0 && <>Transferencias del mes: {fmt(trf)} en {trfCount} {trfCount === 1 ? "movimiento" : "movimientos"}. </>}
+          {trfCount > 0 && <>Transferencias del mes: <Amt>{fmt(trf)}</Amt> en {trfCount} {trfCount === 1 ? "movimiento" : "movimientos"}. </>}
           Las transferencias y lo que apartás o retirás de <Link href="/ahorro" className="underline">ahorro</Link> no cuentan como ingreso ni gasto.
         </p>
       )}
       {foreignMonth.size > 0 && (
         <p className="mt-3 px-1 text-xs text-muted">
           Ingresos, gastos y gráficos son en pesos. En otras monedas este mes:{" "}
-          {[...foreignMonth].map(([c, v]) => `${currencyName(c)} +${money(v.inc, c)} / -${money(v.exp, c)}`).join(" · ")}.
+          {[...foreignMonth].map(([c, v], i) => <span key={c}>{i > 0 && " · "}{currencyName(c)} +<Amt c={c}>{money(v.inc, c)}</Amt> / -<Amt c={c}>{money(v.exp, c)}</Amt></span>)}.
         </p>
-      )}
-
-      <SectionHeader title="Últimos movimientos" action={<Link href="/movimientos" className="text-sm font-semibold text-primary">Ver todo</Link>} />
-      {recent.length === 0 ? (
-        <div className="card text-center text-sm text-muted">Todavía no hay movimientos. <Link href="/movimientos#nuevo" className="font-semibold text-primary">Registrá el primero</Link></div>
-      ) : (
-        <ul className="card divide-y divide-line py-1">
-          {recent.map((t) => <li key={t.id}><MovementRow t={t} when={relDay(t.date, today)} /></li>)}
-        </ul>
       )}
 
       <SectionHeader title="Resumen del hogar · Total" action={<Link href="/resumen" className="text-sm font-semibold text-primary">Por categoría</Link>} />
@@ -190,8 +191,8 @@ export default async function Home() {
               <h3 className="min-w-0 truncate font-bold">{p.me ? `Mis gastos - ${p.name}` : `Gastos de ${p.name}`}</h3>
             </div>
             <dl className="my-4 grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-bg px-3.5 py-2.5"><dt className="text-xs text-muted">Ingresos del mes</dt><dd className="font-bold text-pos tabular-nums">{fmt(p.inc)}</dd></div>
-              <div className="rounded-2xl bg-bg px-3.5 py-2.5"><dt className="text-xs text-muted">Gastos del mes</dt><dd className="font-bold text-neg tabular-nums">{fmt(p.exp)}</dd></div>
+              <div className="rounded-2xl bg-bg px-3.5 py-2.5"><dt className="text-xs text-muted">Ingresos del mes</dt><dd className="font-bold text-pos tabular-nums"><Amt>{fmt(p.inc)}</Amt></dd></div>
+              <div className="rounded-2xl bg-bg px-3.5 py-2.5"><dt className="text-xs text-muted">Gastos del mes</dt><dd className="font-bold text-neg tabular-nums"><Amt>{fmt(p.exp)}</Amt></dd></div>
             </dl>
             <CategoryDonut pie={p.pie} height="h-48" empty={p.me ? "No registraste gastos este mes." : `${p.name} no registró gastos este mes.`} />
           </div>

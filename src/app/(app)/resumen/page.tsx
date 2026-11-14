@@ -6,6 +6,7 @@ import { categoryVisual, monthLabel } from "@/lib/visuals";
 import { COLORS } from "@/lib/chart-colors";
 import { CategoryDonut } from "@/components/Charts";
 import { Empty, Icon, IconTile, PageHeader } from "@/components/ui";
+import Amt from "@/components/Amt";
 
 const shift = (ym: string, n: number) => { const d = new Date(ym + "-01T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
 const start = (ym: string) => new Date(ym + "-01T00:00:00Z");
@@ -73,7 +74,7 @@ export default async function Resumen({ searchParams }: { searchParams: { mes?: 
                   <div className="flex items-center gap-3">
                     <IconTile icon={v.icon} tone={v.tone} />
                     <span className="min-w-0 flex-1 truncate font-semibold">{c.name}</span>
-                    <span className="text-right"><b className="block tabular-nums">{fmt(c.cents)}</b><span className="text-xs text-muted">{pct}%</span></span>
+                    <span className="text-right"><b className="block tabular-nums"><Amt>{fmt(c.cents)}</Amt></b><span className="text-xs text-muted">{pct}%</span></span>
                   </div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.color }} /></div>
                 </li>

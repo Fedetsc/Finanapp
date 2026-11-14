@@ -11,6 +11,7 @@ import { today } from "@/lib/billing";
 import Err from "@/components/Err";
 import SubmitButton from "@/components/SubmitButton";
 import { PageHeader, Notice } from "@/components/ui";
+import Amt from "@/components/Amt";
 
 const PATH = "/ahorro";
 type M = { id: string; householdId: string; userId: string };
@@ -131,7 +132,7 @@ export default async function Ahorro({ searchParams }: { searchParams: { e?: str
           <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Ahorro" />
           <p className="text-sm text-muted">Plata apartada: no cuenta como disponible para gastar, ni como ingreso o gasto.</p>
         </div>
-        <p className="text-right"><span className="block text-xs text-muted">Ahorrado en el hogar</span><span className="text-xl font-semibold">{fmt(total)}</span></p>
+        <p className="text-right"><span className="block text-xs text-muted">Ahorrado en el hogar</span><span className="text-xl font-semibold"><Amt>{fmt(total)}</Amt></span></p>
       </div>
       <Err e={searchParams.e} />
       {searchParams.ok && <Notice tone="ok">Listo, se guardó.</Notice>}
@@ -149,13 +150,13 @@ export default async function Ahorro({ searchParams }: { searchParams: { e?: str
                   <p className="min-w-0 truncate font-medium">{v.emoji && <span className="mr-1">{v.emoji}</span>}{v.name}</p>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${!v.isActive ? "bg-line text-muted" : own ? "bg-primary/10 text-primary" : "bg-warn/15 text-warn"}`}>{!v.isActive ? "Cerrado" : own ? "Mío" : `De ${v.member.name}`}</span>
                 </div>
-                <p className="text-xl font-semibold">{fmt(v.currentAmount)}{v.targetAmount && <span className="text-sm font-normal text-muted"> de {fmt(v.targetAmount)}</span>}</p>
+                <p className="text-xl font-semibold"><Amt>{fmt(v.currentAmount)}</Amt>{v.targetAmount && <span className="text-sm font-normal text-muted"> de <Amt>{fmt(v.targetAmount)}</Amt></span>}</p>
                 {pct !== null && (
                   <div>
                     <div className="h-2 overflow-hidden rounded-full bg-line" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Progreso de ${v.name}`}>
                       <div className={`h-full ${pct >= 100 ? "bg-pos" : "bg-primary"}`} style={{ width: `${pct}%` }} />
                     </div>
-                    <p className="mt-1 text-xs text-muted">{pct >= 100 ? "¡Meta cumplida!" : `${pct}% · faltan ${fmt(v.targetAmount! - v.currentAmount)}`}</p>
+                    <p className="mt-1 text-xs text-muted">{pct >= 100 ? "¡Meta cumplida!" : <>{pct}% · faltan <Amt>{fmt(v.targetAmount! - v.currentAmount)}</Amt></>}</p>
                   </div>
                 )}
                 {own && v.isActive && (
@@ -216,7 +217,7 @@ export default async function Ahorro({ searchParams }: { searchParams: { e?: str
                   <p className="truncate">{mv.type === "DEPOSIT" ? `Apartado: ${mv.account.name} → ${mv.vault.name}` : `Retiro: ${mv.vault.name} → ${mv.account.name}`}</p>
                   <p className="text-xs text-muted">{[fdate(mv.date), mv.member.name, mv.description].filter(Boolean).join(" / ")}</p>
                 </div>
-                <span className="shrink-0 font-medium text-primary">{mv.type === "DEPOSIT" ? "→ " : "← "}{fmt(mv.amount)}</span>
+                <span className="shrink-0 font-medium text-primary">{mv.type === "DEPOSIT" ? "→ " : "← "}<Amt>{fmt(mv.amount)}</Amt></span>
               </li>
             ))}
           </ul>

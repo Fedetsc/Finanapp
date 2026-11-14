@@ -23,7 +23,7 @@ export default async function Shell({ children }: { children: React.ReactNode })
         {MAIN.map(([h, l, i]) => <NavLink key={h} href={h} icon={i}>{l}</NavLink>)}
         <p className="mb-1 mt-5 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted">Hogar</p>
         {HOGAR.map(([h, l, i]) => <NavLink key={h} href={h} icon={i}>{l}</NavLink>)}
-        <Link href="/movimientos#nuevo" className="btn mt-5"><Icon name="plus" className="h-4 w-4" />Nuevo movimiento</Link>
+        <Link href="/movimientos/nuevo" className="btn mt-5"><Icon name="plus" className="h-4 w-4" />Nuevo movimiento</Link>
 
         <div className="mt-auto space-y-2 pt-6">
           <details className="group rounded-2xl bg-bg">

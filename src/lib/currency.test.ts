@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { convert, formatRate, money, parseCurrency, parseRate, rateQuote, rateToDecimal } from "./currency";
+import { convert, decimalToRate, toArs, formatRate, money, parseCurrency, parseRate, rateQuote, rateToDecimal } from "./currency";
 
 describe("monedas", () => {
   it("valida la moneda elegida", () => {
@@ -44,5 +44,17 @@ describe("tipo de cambio", () => {
     expect(convert(12000000n, "ARS", "USD_MEP", r)).toBe(10000n); // $120.000 -> US$ 100
     expect(convert(100000n, "ARS", "USD", r)).toBe(83n); // $1.000 -> US$ 0,83 (redondeo)
     expect(convert(10000n, "EUR", "USD", parseRate("1,08"))).toBe(10800n);
+  });
+});
+
+describe("cotización de referencia", () => {
+  it("lee el decimal de la base sin confundir el punto con miles", () => {
+    expect(decimalToRate("1250.5")).toBe(1_250_500_000n);
+    expect(decimalToRate("1.25")).toBe(1_250_000n);
+    expect(decimalToRate("1200")).toBe(1_200_000_000n);
+  });
+  it("calcula el equivalente en pesos", () => {
+    expect(toArs(10000n, decimalToRate("1200"))).toBe(12000000n); // US$ 100 -> $120.000
+    expect(toArs(-10000n, decimalToRate("1200"))).toBe(-12000000n);
   });
 });

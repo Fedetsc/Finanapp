@@ -1,71 +1,16 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
-import { fail } from "@/lib/action";
-import Link from "next/link";
-import { parseDate, toCents, todayAR } from "@/lib/util";
-import { convert, money, parseRate, rateToDecimal } from "@/lib/currency";
+import { todayAR } from "@/lib/util";
 import { relDay } from "@/lib/visuals";
-import MovementRow from "@/components/MovementRow";
-import { Avatar, Empty, Icon, Notice, PageHeader } from "@/components/ui";
-import Err from "@/components/Err";
-import MovementForm from "@/components/MovementForm";
 import { today } from "@/lib/billing";
-
-const base = { amount: z.string(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), accountId: z.string().min(1), description: z.string().trim().max(120) };
-const Form = z.discriminatedUnion("type", [
-  z.object({ type: z.enum(["INCOME", "EXPENSE"]), categoryId: z.string().min(1), ...base }),
-  z.object({ type: z.literal("TRANSFER"), toAccountId: z.string().min(1), exchangeRate: z.string().optional(), ...base }),
-]);
-
-async function add(fd: FormData) {
-  "use server";
-  const m = await requireMember();
-  try {
-    const f = Form.parse(Object.fromEntries(fd));
-    const amount = toCents(f.amount);
-    if (amount <= 0n) throw new Error("El importe debe ser mayor a cero");
-    const date = parseDate(f.date);
-
-    // Cuenta del gasto/ingreso u origen de la transferencia: tiene que ser mía.
-    const acc = await db.account.findUnique({ where: { id: f.accountId } });
-    if (!acc || acc.householdId !== m.householdId) throw new Error("Elegí una cuenta válida");
-    if (acc.ownerMemberId !== m.id) throw new Error("No podés usar la cuenta de otro miembro");
-
-    let data: { categoryId: string } | { toAccountId: string; toAmount: bigint; exchangeRate: string | null };
-    let description = f.description;
-    if (f.type === "TRANSFER") {
-      // Destino: cualquier cuenta del hogar (también la del otro miembro), distinta del origen.
-      const to = await db.account.findUnique({ where: { id: f.toAccountId } });
-      if (!to || to.householdId !== m.householdId) throw new Error("Elegí una cuenta de destino válida");
-      if (to.id === acc.id) throw new Error("La cuenta de origen y la de destino tienen que ser distintas");
-      if (to.currency === acc.currency) {
-        data = { toAccountId: to.id, toAmount: amount, exchangeRate: null };
-      } else {
-        // Monedas distintas: el usuario carga el tipo de cambio y se guarda junto con el monto que llega a destino.
-        if (!f.exchangeRate?.trim()) throw new Error("Poné el tipo de cambio para transferir entre monedas distintas");
-        const rate = parseRate(f.exchangeRate);
-        const toAmount = convert(amount, acc.currency, to.currency, rate);
-        if (toAmount <= 0n) throw new Error("Con ese tipo de cambio el monto en destino da cero");
-        data = { toAccountId: to.id, toAmount, exchangeRate: rateToDecimal(rate) };
-      }
-      description ||= "Transferencia";
-    } else {
-      const cat = await db.category.findFirst({ where: { id: f.categoryId, householdId: m.householdId } });
-      if (!cat) throw new Error("Elegí una categoría");
-      data = { categoryId: cat.id };
-    }
-
-    await db.$transaction(async (tx) => {
-      const t = await tx.transaction.create({ data: { householdId: m.householdId, memberId: m.id, accountId: acc.id, type: f.type, amount, date, description, ...data } });
-      await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "CREATE", entity: f.type === "TRANSFER" ? "Transfer" : "Transaction", entityId: t.id } });
-    });
-  } catch (e) { fail("/movimientos", e); }
-  revalidatePath("/", "layout");
-  redirect(`/movimientos?ok=${Date.now()}`);
-}
+import { accrueYields } from "@/lib/yields";
+import MovementRow from "@/components/MovementRow";
+import SubmitButton from "@/components/SubmitButton";
+import { Empty, Icon, Notice, PageHeader } from "@/components/ui";
+import Err from "@/components/Err";
 
 async function voidTx(fd: FormData) {
   "use server";
@@ -89,80 +34,117 @@ async function voidTx(fd: FormData) {
   revalidatePath("/", "layout");
 }
 
-export default async function Movimientos({ searchParams }: { searchParams: { e?: string; ok?: string; quien?: string } }) {
+const TYPES = { EXPENSE: "Gasto", INCOME: "Ingreso", TRANSFER: "Transferencia", YIELD: "Rendimiento" } as const;
+const PAGE = 30; // movimientos por tanda ("Ver más" suma otra tanda)
+const MAX = 600;
+const isoDate = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+
+type Search = { e?: string; ok?: string; q?: string; quien?: string; cuenta?: string; cat?: string; tipo?: string; desde?: string; hasta?: string; n?: string };
+
+/** Lista de movimientos del hogar con búsqueda y filtros. El formulario para cargar uno vive en /movimientos/nuevo. */
+export default async function Movimientos({ searchParams: sp }: { searchParams: Search }) {
   const m = await requireMember();
+  await accrueYields(m.householdId); // rendimientos pendientes (por si el cron no corrió)
   const where = { householdId: m.householdId };
   const [accounts, categories, members] = await Promise.all([
-    db.account.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, currency: true, ownerMemberId: true, owner: { select: { name: true } } } }),
+    db.account.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, ownerMemberId: true, owner: { select: { name: true } } } }),
     db.category.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.member.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
-  // Filtro por miembro (pills): solo de los miembros de este hogar.
-  const quien = members.some((x) => x.id === searchParams.quien) ? searchParams.quien : undefined;
-  const txs = await db.transaction.findMany({ where: { ...where, ...(quien ? { memberId: quien } : {}) }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 50, include: { category: true, account: true, toAccount: true, member: true } });
-  const mine = accounts.filter((a) => a.ownerMemberId === m.id).map(({ id, name, currency }) => ({ id, name, currency }));
-  const byOwner = new Map<string, { id: string; name: string; currency: string }[]>();
-  accounts.filter((a) => a.ownerMemberId !== m.id).forEach((a) => byOwner.set(a.owner.name, [...(byOwner.get(a.owner.name) ?? []), { id: a.id, name: a.name, currency: a.currency }]));
-  const others = [...byOwner].map(([owner, accounts]) => ({ owner, accounts }));
 
-  // Agrupado por día ("Hoy", "Ayer", "12 nov") con el neto del día por moneda (sin transferencias ni anulados).
-  const todayIso = todayAR();
-  const groups: { label: string; net: Map<string, bigint>; items: typeof txs }[] = [];
-  for (const t of txs) {
-    const label = relDay(t.date, todayIso);
-    let g = groups[groups.length - 1];
-    if (!g || g.label !== label) groups.push((g = { label, net: new Map(), items: [] }));
-    g.items.push(t);
-    if (!t.voidedAt && t.type !== "TRANSFER") g.net.set(t.account.currency, (g.net.get(t.account.currency) ?? 0n) + (t.type === "INCOME" ? t.amount : -t.amount));
-  }
-  const netLabel = (net: Map<string, bigint>) => {
-    const parts = [...net].filter(([, v]) => v !== 0n).map(([cur, v]) => (v > 0n ? "+" : "-") + money(v < 0n ? -v : v, cur));
-    return parts.length ? parts.join(" · ") : money(0n);
+  // Filtros: solo se aceptan valores de este hogar.
+  const q = (sp.q ?? "").trim().slice(0, 80);
+  const quien = members.some((x) => x.id === sp.quien) ? sp.quien : undefined;
+  const cuenta = accounts.some((x) => x.id === sp.cuenta) ? sp.cuenta : undefined;
+  const cat = categories.some((x) => x.id === sp.cat) ? sp.cat : undefined;
+  const tipo = sp.tipo && sp.tipo in TYPES ? (sp.tipo as keyof typeof TYPES) : undefined;
+  const desde = isoDate(sp.desde);
+  const hasta = isoDate(sp.hasta);
+  const n = Math.min(MAX, Math.max(PAGE, Math.floor(Number(sp.n) / PAGE) * PAGE || PAGE));
+
+  // Misma consulta que usaba la card "Últimos movimientos" de Inicio, con filtros y paginación.
+  const filter: Prisma.TransactionWhereInput = {
+    householdId: m.householdId,
+    voidedAt: null,
+    ...(quien ? { memberId: quien } : {}),
+    ...(cuenta ? { OR: [{ accountId: cuenta }, { toAccountId: cuenta }] } : {}),
+    ...(cat ? { categoryId: cat } : {}),
+    ...(tipo ? { type: tipo } : {}),
+    ...(desde || hasta ? { date: { ...(desde ? { gte: new Date(desde + "T00:00:00Z") } : {}), ...(hasta ? { lte: new Date(hasta + "T00:00:00Z") } : {}) } } : {}),
+    ...(q ? { AND: [{ OR: [{ description: { contains: q, mode: "insensitive" } }, { category: { name: { contains: q, mode: "insensitive" } } }] }] } : {}),
   };
+  const rows = await db.transaction.findMany({
+    where: filter,
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    take: n + 1,
+    include: { category: { select: { name: true } }, account: { select: { name: true, currency: true } }, toAccount: { select: { name: true, currency: true } }, member: { select: { name: true } } },
+  });
+  const more = rows.length > n;
+  const txs = more ? rows.slice(0, n) : rows;
+
+  const todayIso = todayAR();
+  const active = [q, quien, cuenta, cat, tipo, desde, hasta].filter(Boolean).length;
+  const kept = Object.entries({ q, quien, cuenta, cat, tipo, desde, hasta }).filter((e): e is [string, string] => !!e[1]);
+  const moreHref = `/movimientos?${new URLSearchParams([...kept, ["n", String(n + PAGE)]])}`;
   const people = [...members.filter((x) => x.id === m.id), ...members.filter((x) => x.id !== m.id)];
 
   return (
-    <div>
-      <PageHeader title="Movimientos" subtitle={m.household.name} right={<Link href="#nuevo" className="pill"><Icon name="plus" className="h-4 w-4" />Nuevo</Link>} />
-      <Err e={searchParams.e} />
-      {searchParams.ok && <Notice tone="ok">Movimiento guardado.</Notice>}
+    <div className="space-y-4">
+      <PageHeader title="Movimientos" subtitle={m.household.name} right={<Link href="/movimientos/nuevo" className="pill"><Icon name="plus" className="h-4 w-4" />Nuevo</Link>} />
+      <Err e={sp.e} />
+      {sp.ok && <Notice tone="ok">Movimiento guardado.</Notice>}
 
-      {mine.length === 0 ? (
-        <div id="nuevo" className="card text-center text-sm text-muted">Para registrar movimientos, primero <Link href="/cuentas" className="font-semibold text-primary">creá una cuenta tuya</Link>.</div>
-      ) : (
-        <MovementForm key={searchParams.ok} action={add} mine={mine} others={others} categories={categories} today={todayIso} me={m.name} />
-      )}
-
-      <nav aria-label="Filtrar por miembro" className="-mx-1 mt-7 flex gap-2 overflow-x-auto px-1 pb-1">
-        <Link href="/movimientos" aria-current={!quien ? "page" : undefined} className={`pill shrink-0 ${!quien ? "pill-on" : ""}`}>Todos</Link>
-        {people.map((p) => (
-          <Link key={p.id} href={`/movimientos?quien=${p.id}`} aria-current={quien === p.id ? "page" : undefined} className={`pill shrink-0 pl-1.5 ${quien === p.id ? "pill-on" : ""}`}>
-            <Avatar name={p.name} size="sm" />{p.id === m.id ? `${p.name} (yo)` : p.name}
-          </Link>
-        ))}
-      </nav>
+      <form method="get" action="/movimientos" role="search" className="card space-y-3">
+        <label className="relative block">
+          <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input name="q" type="search" defaultValue={q} maxLength={80} placeholder="Buscar por descripción" aria-label="Buscar por descripción" className="input pl-10" />
+        </label>
+        <details className="group" open={active > (q ? 1 : 0)}>
+          <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-muted [&::-webkit-details-marker]:hidden">
+            <span>Filtros{active > 0 ? ` (${active})` : ""}</span>
+            <Icon name="chevronDown" className="h-4 w-4 transition group-open:rotate-180" />
+          </summary>
+          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <select name="quien" defaultValue={quien ?? ""} aria-label="Miembro" className="input">
+              <option value="">Todos los miembros</option>
+              {people.map((p) => <option key={p.id} value={p.id}>{p.id === m.id ? `${p.name} (yo)` : p.name}</option>)}
+            </select>
+            <select name="cuenta" defaultValue={cuenta ?? ""} aria-label="Cuenta" className="input">
+              <option value="">Todas las cuentas</option>
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.ownerMemberId === m.id ? a.name : `${a.name} · ${a.owner.name}`}</option>)}
+            </select>
+            <select name="cat" defaultValue={cat ?? ""} aria-label="Categoría" className="input">
+              <option value="">Todas las categorías</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <select name="tipo" defaultValue={tipo ?? ""} aria-label="Tipo" className="input">
+              <option value="">Todos los tipos</option>
+              {Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <label className="text-xs text-muted">Desde<input name="desde" type="date" defaultValue={desde} className="input mt-1" /></label>
+            <label className="text-xs text-muted">Hasta<input name="hasta" type="date" defaultValue={hasta} className="input mt-1" /></label>
+          </div>
+        </details>
+        <div className="flex gap-2">
+          <button className="btn flex-1">Buscar</button>
+          {active > 0 && <Link href="/movimientos" className="pill shrink-0 justify-center px-4">Limpiar</Link>}
+        </div>
+      </form>
 
       {txs.length === 0 ? (
-        <div className="mt-4"><Empty>Todavía no hay movimientos{quien ? " de esta persona" : ""}.</Empty></div>
+        <Empty>{active > 0 ? "No hay movimientos con esos filtros." : <>Todavía no hay movimientos. <Link href="/movimientos/nuevo" className="font-semibold text-primary">Registrá el primero</Link></>}</Empty>
       ) : (
-        groups.map((g) => (
-          <section key={g.label} className="mt-6">
-            <div className="mb-2 flex items-baseline justify-between px-1">
-              <h2 className="font-bold">{g.label}</h2>
-              <span className="text-right text-sm text-muted tabular-nums">{netLabel(g.net)}</span>
-            </div>
-            <ul className="card divide-y divide-line py-1">
-              {g.items.map((t) => (
-                <li key={t.id}>
-                  <MovementRow t={t} chips action={!t.voidedAt && t.memberId === m.id ? (
-                    <form action={voidTx}><input type="hidden" name="id" value={t.id} /><button className="text-[11px] font-medium text-muted hover:text-neg">Anular</button></form>
-                  ) : undefined} />
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))
+        <ul className="card divide-y divide-line py-1">
+          {txs.map((t) => (
+            <li key={t.id}>
+              <MovementRow t={t} when={relDay(t.date, todayIso)} action={t.memberId === m.id ? (
+                <form action={voidTx}><input type="hidden" name="id" value={t.id} /><SubmitButton className="text-[11px] font-medium text-muted hover:text-neg" pendingText="...">Anular</SubmitButton></form>
+              ) : undefined} />
+            </li>
+          ))}
+        </ul>
       )}
+      {more && n < MAX && <Link href={moreHref} scroll={false} className="pill w-full justify-center">Ver más</Link>}
     </div>
   );
 }

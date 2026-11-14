@@ -12,6 +12,8 @@ enum TxType {
   INCOME
   EXPENSE
   TRANSFER
+  /// Rendimiento diario acreditado automáticamente (suma al saldo; no cuenta como ingreso del mes).
+  YIELD
 }
 
 enum AccountType {
@@ -61,6 +63,7 @@ model Household {
   cardPurchases CreditCardPurchase[]
   savingsVaults SavingsVault[]
   savingsMoves  SavingsMovement[]
+  exchangeRates ExchangeRate[]
 }
 
 model Member {
@@ -94,6 +97,14 @@ model Account {
   /// Código de moneda: ARS, USD, USD_MEP, EUR u otro escrito por el usuario. Saldos y movimientos van en esta moneda.
   currency         String            @default("ARS")
   openingBalance   BigInt            @default(0)
+  /// Rendimientos: si la cuenta genera interés diario (no aplica a CASH).
+  yieldEnabled     Boolean           @default(false)
+  /// TNA en % (ej. 35.5). Al cambiarla se usa desde la próxima acreditación; no se recalcula lo viejo.
+  yieldAnnualRate  Decimal?          @db.Decimal(9, 4)
+  /// false: el saldo ya trae los rendimientos (ej. Mercado Pago conectado), solo se muestran como informativos.
+  yieldAutoAccrue  Boolean           @default(true)
+  /// Último día acreditado (o el día en que se activó). La próxima acreditación es para el día siguiente.
+  lastYieldAt      DateTime?         @db.Date
   createdAt        DateTime          @default(now())
   household        Household         @relation(fields: [householdId], references: [id])
   owner            Member            @relation(fields: [ownerMemberId], references: [id])
@@ -149,8 +160,11 @@ model Transaction {
   /// Pago de una cuota de tarjeta (una cuota no se puede pagar dos veces).
   installmentId  String?       @unique
   installment    Installment?  @relation(fields: [installmentId], references: [id], onDelete: Restrict)
+  /// Solo en YIELD: día acreditado. Único por cuenta: el mismo día no se acredita dos veces.
+  yieldDate      DateTime?     @db.Date
 
   @@unique([subscriptionId, date])
+  @@unique([accountId, yieldDate])
   @@index([householdId, date])
   @@index([toAccountId])
   @@index([accountId])
@@ -293,4 +307,18 @@ model SavingsMovement {
   @@index([vaultId, date])
   @@index([accountId])
   @@index([householdId])
+}
+
+/// Cotización de referencia que carga el hogar a mano (pesos por 1 unidad de la moneda).
+/// Solo sirve para mostrar el equivalente en ARS; los saldos siguen guardados en su moneda.
+model ExchangeRate {
+  id                String    @id @default(uuid())
+  householdId       String
+  currency          String
+  rate              Decimal   @db.Decimal(20, 6)
+  updatedAt         DateTime  @updatedAt
+  updatedByMemberId String?
+  household         Household @relation(fields: [householdId], references: [id])
+
+  @@unique([householdId, currency])
 }

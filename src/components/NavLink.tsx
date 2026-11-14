@@ -6,7 +6,11 @@ import { Icon } from "./ui";
 /** Rutas que cuentan como "Hogar" en la barra inferior (sus subsecciones). */
 export const HOGAR_ROUTES = ["/hogar", "/cuentas", "/ahorro", "/tarjetas", "/suscripciones", "/categorias"];
 
+/** Formulario de nuevo movimiento: tiene su propio botón (+), así que no marca "Movimientos" como activo. */
+export const NEW_MOVEMENT = "/movimientos/nuevo";
+
 export function isActive(path: string, href: string, also: string[] = []) {
+  if (path === NEW_MOVEMENT && href !== NEW_MOVEMENT) return false;
   const hit = (h: string) => (h === "/" ? path === "/" : path === h || path.startsWith(h + "/"));
   return hit(href) || also.some(hit);
 }

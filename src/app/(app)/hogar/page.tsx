@@ -4,10 +4,12 @@ import { listMemberships, requireMember, roleLabel, isAdmin } from "@/lib/sessio
 import { logout } from "@/lib/household-actions";
 import { accountBalances } from "@/lib/balances";
 import { money } from "@/lib/currency";
+import { arsEquivalent, referenceRates } from "@/lib/rates";
 import { ACCOUNT_VISUAL } from "@/lib/visuals";
 import HouseholdSwitcher from "@/components/HouseholdSwitcher";
 import CopyButton from "@/components/CopyButton";
 import { Avatar, AvatarStack, HeroCard, Icon, IconTile, PageHeader, SectionHeader } from "@/components/ui";
+import Amt, { MASK } from "@/components/Amt";
 
 const LINKS = [
   ["/cuentas", "Cuentas", "bank", "blue", "Saldos de cada cuenta"],
@@ -20,11 +22,12 @@ const LINKS = [
 /** Hub del hogar (como el ejemplo): miembros, código de invitación, cuentas, secciones y cambio de hogar. */
 export default async function Hogar() {
   const m = await requireMember();
-  const [members, accounts, balances, all] = await Promise.all([
+  const [members, accounts, balances, all, rates] = await Promise.all([
     db.member.findMany({ where: { householdId: m.householdId }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, role: true } }),
     db.account.findMany({ where: { householdId: m.householdId, ownerMemberId: m.id }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, type: true, currency: true, openingBalance: true } }),
     accountBalances(m.householdId),
     listMemberships(m.userId),
+    referenceRates(m.householdId),
   ]);
 
   return (
@@ -67,7 +70,10 @@ export default async function Hogar() {
               <li key={a.id} className="flex items-center gap-3.5 py-3.5">
                 <IconTile icon={v.icon} tone={v.tone} />
                 <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{a.name}</span><span className="text-xs text-muted">Personal</span></span>
-                <span className="font-bold tabular-nums">{money(balances.get(a.id) ?? a.openingBalance, a.currency)}</span>
+                <span className="flex flex-col items-end">
+                  <span className="font-bold tabular-nums"><Amt c={a.currency}>{money(balances.get(a.id) ?? a.openingBalance, a.currency)}</Amt></span>
+                  {arsEquivalent(balances.get(a.id) ?? a.openingBalance, a.currency, rates) && <span className="text-[11px] text-muted tabular-nums"><Amt mask={`≈ $ ${MASK}`}>{arsEquivalent(balances.get(a.id) ?? a.openingBalance, a.currency, rates)}</Amt></span>}
+                </span>
               </li>
             );
           })}

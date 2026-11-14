@@ -13,6 +13,7 @@ import Err from "@/components/Err";
 import SubmitButton from "@/components/SubmitButton";
 import { Notice, PageHeader } from "@/components/ui";
 import AdvancePay from "@/components/AdvancePay";
+import Amt from "@/components/Amt";
 
 const back = (id: string) => `/tarjetas/${id}`;
 
@@ -120,7 +121,7 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
   const thisMonth = unpaid.filter((i) => i.dueDate <= endOfMonth).reduce((s, i) => s + i.amount, 0n);
   const used = pending.get(card.id) ?? 0n;
   const label = (i: (typeof unpaid)[number]) => `Cuota ${i.number}/${i.purchase.installmentsCount} · ${i.purchase.description}`;
-  const Stat = ({ l, v, c }: { l: string; v: string; c?: string }) => <div className="card"><p className="text-xs text-muted">{l}</p><p className={`mt-1 text-lg font-semibold ${c ?? ""}`}>{v}</p></div>;
+  const Stat = ({ l, v, c }: { l: string; v: React.ReactNode; c?: string }) => <div className="card"><p className="text-xs text-muted">{l}</p><p className={`mt-1 text-lg font-semibold ${c ?? ""}`}>{v}</p></div>;
 
   return (
     <div className="space-y-4">
@@ -131,9 +132,9 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
       {searchParams.pagado && <Notice tone="ok">Pago registrado. Ya se descontó de tu cuenta.</Notice>}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat l="Límite" v={fmt(card.limit)} />
-        <Stat l="Disponible" v={fmt(card.limit - used)} />
-        <Stat l="A pagar hasta fin de mes" v={fmt(thisMonth)} c="text-neg" />
+        <Stat l="Límite" v={<Amt>{fmt(card.limit)}</Amt>} />
+        <Stat l="Disponible" v={<Amt>{fmt(card.limit - used)}</Amt>} />
+        <Stat l="A pagar hasta fin de mes" v={<Amt>{fmt(thisMonth)}</Amt>} c="text-neg" />
         <Stat l="Esperando confirmación" v={String(awaiting.length)} c={awaiting.length ? "text-warn" : ""} />
       </div>
 
@@ -148,7 +149,7 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
               <li key={i.id} className="py-2">
                 <div className="flex items-center justify-between gap-3 text-sm">
                   <span className="min-w-0"><span className="block truncate">{label(i)}</span><span className="text-xs text-muted">Vence {fdate(i.dueDate)}</span></span>
-                  <span className="shrink-0 font-medium">{fmt(i.amount)}</span>
+                  <span className="shrink-0 font-medium"><Amt>{fmt(i.amount)}</Amt></span>
                 </div>
                 {own && accounts.length > 0 && (
                   <details className="mt-1">
@@ -159,7 +160,7 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
                       <label className="flex-1 text-xs text-muted">¿Con qué cuenta abonaste esta cuota?
                         <select name="accountId" required className="input mt-1">{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
                       </label>
-                      <SubmitButton className="btn" pendingText="Registrando...">Confirmar {fmt(i.amount)}</SubmitButton>
+                      <SubmitButton className="btn" pendingText="Registrando...">Confirmar <Amt>{fmt(i.amount)}</Amt></SubmitButton>
                     </form>
                   </details>
                 )}
@@ -204,7 +205,7 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
                 <p className="text-xs text-muted">{fdate(p.purchaseDate)} · {p.installmentsPaid}/{p.installmentsCount} cuotas pagadas · {p.member.name}</p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="font-semibold">{fmt(p.totalAmount)}</p>
+                <p className="font-semibold"><Amt>{fmt(p.totalAmount)}</Amt></p>
                 <p className="text-xs text-muted">{p.status === "PAID" ? "Pagada" : p.status === "CANCELLED" ? "Cancelada" : "Activa"}</p>
               </div>
             </div>
@@ -213,7 +214,7 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
                 {p.installments.map((i) => (
                   <li key={i.id} className="flex items-center justify-between gap-2">
                     <span>Cuota {i.number} · vence {fdate(i.dueDate)}</span>
-                    <span className="flex items-center gap-2"><span>{fmt(i.amount)}</span><span className={`rounded-full px-2 py-0.5 ${STATUS_CLS[i.status]}`}>{STATUS_LABEL[i.status]}</span></span>
+                    <span className="flex items-center gap-2"><span><Amt>{fmt(i.amount)}</Amt></span><span className={`rounded-full px-2 py-0.5 ${STATUS_CLS[i.status]}`}>{STATUS_LABEL[i.status]}</span></span>
                   </li>
                 ))}
               </ul>

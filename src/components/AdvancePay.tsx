@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { fmt } from "@/lib/util";
 import SubmitButton from "./SubmitButton";
+import Amt from "./Amt";
 
 type Item = { id: string; label: string; detail: string; cents: string };
 
@@ -30,7 +31,7 @@ export default function AdvancePay({ action, cardId, items, accounts }: {
             <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm">
               <input type="checkbox" name="ids" value={i.id} checked={sel.has(i.id)} onChange={() => flip(i.id)} className="h-4 w-4 accent-[rgb(var(--primary))]" />
               <span className="min-w-0 flex-1"><span className="block truncate">{i.label}</span><span className="text-xs text-muted">{i.detail}</span></span>
-              <span className="shrink-0 font-medium">{fmt(BigInt(i.cents))}</span>
+              <span className="shrink-0 font-medium"><Amt>{fmt(BigInt(i.cents))}</Amt></span>
             </label>
           </li>
         ))}
@@ -41,7 +42,7 @@ export default function AdvancePay({ action, cardId, items, accounts }: {
         </label>
         <div className="flex flex-col justify-end">
           <p className="text-xs text-muted">Total a adelantar</p>
-          <p className="text-xl font-semibold">{fmt(total)}</p>
+          <p className="text-xl font-semibold"><Amt>{fmt(total)}</Amt></p>
         </div>
       </div>
       <SubmitButton className="btn w-full" disabled={sel.size === 0} pendingText="Registrando pago...">

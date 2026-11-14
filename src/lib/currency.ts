@@ -85,3 +85,16 @@ export function convert(amount: bigint, from: string, to: string, rate: bigint):
   // rate = cuántas `quote` vale 1 `base`. Si el origen es la base se multiplica; si es la quote, se divide.
   return rateQuote(from, to).base === from ? divRound(amount * rate, SCALE) : divRound(amount * SCALE, rate);
 }
+
+/** Decimal guardado en la base ("1250.5", "1.25") -> entero escalado ×1.000.000. */
+export function decimalToRate(decimal: string): bigint {
+  const [i, d = ""] = decimal.split(".");
+  return BigInt(i) * SCALE + BigInt(d.slice(0, 6).padEnd(6, "0"));
+}
+
+/** Equivalente en pesos de un saldo en otra moneda, con la cotización de referencia (admite saldos negativos). */
+export function toArs(cents: bigint, rate: bigint): bigint {
+  const abs = cents < 0n ? -cents : cents;
+  const v = divRound(abs * rate, SCALE);
+  return cents < 0n ? -v : v;
+}

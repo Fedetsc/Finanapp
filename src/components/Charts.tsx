@@ -1,6 +1,8 @@
 "use client";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CHART, type Slice } from "@/lib/chart-colors";
+import Amt, { MASK } from "./Amt";
+import { useAmountsHidden } from "./HideAmounts";
 
 const tip = {
   contentStyle: { background: "#FFFFFF", border: "none", borderRadius: 14, fontSize: 12, boxShadow: "0 6px 20px rgba(16,24,40,.08)" },
@@ -8,11 +10,17 @@ const tip = {
   labelStyle: { color: "#8A94A3" },
 };
 const money = (v: unknown) => "$" + Number(v).toLocaleString("es-AR", { maximumFractionDigits: 0 });
+/** Formato del tooltip: respeta el ojito (el tooltip lo dibuja Recharts, no se puede ocultar con CSS). */
+function useMoneyFormatter() {
+  const hidden = useAmountsHidden();
+  return hidden ? () => `$ ${MASK}` : money;
+}
 
 /** Donut con total al centro y leyenda propia debajo (porcentaje por categoría). */
 export function CategoryDonut({ pie, empty, height = "h-56", centerLabel = "Total gastado" }: { pie: Slice[]; empty: string; height?: string; centerLabel?: string }) {
   if (!pie.length) return <p className="py-14 text-center text-sm text-muted">{empty}</p>;
   const total = pie.reduce((a, s) => a + s.value, 0);
+  const format = useMoneyFormatter();
   return (
     <div>
       <div className={`relative ${height}`}>
@@ -21,12 +29,12 @@ export function CategoryDonut({ pie, empty, height = "h-56", centerLabel = "Tota
             <Pie data={pie} dataKey="value" nameKey="name" innerRadius="70%" outerRadius="96%" paddingAngle={pie.length > 1 ? 2 : 0} stroke="none" startAngle={90} endAngle={-270}>
               {pie.map((s) => <Cell key={s.name} fill={s.color} />)}
             </Pie>
-            <Tooltip {...tip} formatter={money} />
+            <Tooltip {...tip} formatter={format} />
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
           <span className="text-xs text-muted">{centerLabel}</span>
-          <span className="text-xl font-extrabold tracking-tight">{money(total)}</span>
+          <span className="text-xl font-extrabold tracking-tight"><Amt>{money(total)}</Amt></span>
         </div>
       </div>
       <ul className="mt-4 space-y-2">
@@ -35,7 +43,7 @@ export function CategoryDonut({ pie, empty, height = "h-56", centerLabel = "Tota
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate">{s.name}</span>
             <span className="text-muted">{Math.round((s.value / total) * 100)}%</span>
-            <span className="w-24 text-right font-semibold">{money(s.value)}</span>
+            <span className="w-24 text-right font-semibold"><Amt>{money(s.value)}</Amt></span>
           </li>
         ))}
       </ul>
@@ -44,6 +52,7 @@ export function CategoryDonut({ pie, empty, height = "h-56", centerLabel = "Tota
 }
 
 export function MonthlyBars({ bars }: { bars: { mes: string; Ingresos: number; Gastos: number }[] }) {
+  const format = useMoneyFormatter();
   return (
     <div>
       <div className="mb-3 flex gap-4 text-xs text-muted">
@@ -56,7 +65,7 @@ export function MonthlyBars({ bars }: { bars: { mes: string; Ingresos: number; G
             <CartesianGrid vertical={false} stroke={CHART.grid} />
             <XAxis dataKey="mes" tick={{ fontSize: 12, fill: CHART.axis }} axisLine={false} tickLine={false} />
             <YAxis hide />
-            <Tooltip {...tip} formatter={money} cursor={{ fill: "rgba(45,74,99,.05)" }} />
+            <Tooltip {...tip} formatter={format} cursor={{ fill: "rgba(45,74,99,.05)" }} />
             <Bar dataKey="Ingresos" fill={CHART.income} radius={[6, 6, 0, 0]} maxBarSize={22} />
             <Bar dataKey="Gastos" fill={CHART.expense} radius={[6, 6, 0, 0]} maxBarSize={22} />
           </BarChart>

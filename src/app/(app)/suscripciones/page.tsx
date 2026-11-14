@@ -12,6 +12,7 @@ import { processDueSubscriptions, today } from "@/lib/billing";
 import Err from "@/components/Err";
 import SubmitButton from "@/components/SubmitButton";
 import { PageHeader } from "@/components/ui";
+import Amt, { MASK } from "@/components/Amt";
 
 const PATH = "/suscripciones";
 const Form = z.object({
@@ -141,7 +142,7 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
           <Link href={PATH} aria-current={!all ? "page" : undefined} className={chip(!all)}>Activas</Link>
           <Link href={`${PATH}?ver=todas`} aria-current={all ? "page" : undefined} className={chip(all)}>Todas</Link>
         </nav>
-        {monthly && <p className="text-xs text-muted">≈ {monthly} por mes en suscripciones activas</p>}
+        {monthly && <p className="text-xs text-muted">≈ <Amt mask={MASK}>{monthly}</Amt> por mes en suscripciones activas</p>}
       </div>
 
       {subs.length === 0 ? (
@@ -159,7 +160,7 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${s.isActive ? "bg-pos/10 text-pos" : "bg-line text-muted"}`}>{s.isActive ? "Activa" : "Pausada"}</span>
                 </div>
-                <p className="text-xl font-semibold">{money(s.amount, s.account.currency)}</p>
+                <p className="text-xl font-semibold"><Amt c={s.account.currency}>{money(s.amount, s.account.currency)}</Amt></p>
                 <dl className="grid grid-cols-2 gap-1 text-xs">
                   <div><dt className="text-muted">Próximo pago</dt><dd>{s.isActive ? fdate(s.nextPaymentDate) : "—"}</dd></div>
                   <div><dt className="text-muted">Último cobro</dt><dd>{s.lastChargedDate ? fdate(s.lastChargedDate) : "Todavía no"}</dd></div>

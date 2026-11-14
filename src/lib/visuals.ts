@@ -16,12 +16,14 @@ const RULES: [RegExp, Visual][] = [
   [/educa|curso|colegio|libro/i, { icon: "book", tone: "blue" }],
   [/mascota|veterin/i, { icon: "paw", tone: "orange" }],
   [/impuesto|afip|arba|tasa/i, { icon: "receipt", tone: "pink" }],
+  [/rendimiento|inter[eé]s/i, { icon: "trend", tone: "green" }],
   [/ahorro|inversi/i, { icon: "piggy", tone: "green" }],
   [/sueldo|salario|ingreso|honorario|cobro/i, { icon: "wallet", tone: "green" }],
 ];
 
 export function categoryVisual(name: string | null | undefined, type?: string): Visual {
   if (type === "TRANSFER") return { icon: "transfer", tone: "blue" };
+  if (type === "YIELD") return { icon: "trend", tone: "green" };
   const hit = name ? RULES.find(([re]) => re.test(name)) : undefined;
   if (hit) return hit[1];
   return type === "INCOME" ? { icon: "wallet", tone: "green" } : { icon: "tag", tone: "gray" };

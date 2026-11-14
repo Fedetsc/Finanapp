@@ -11,6 +11,7 @@ import { pendingByCard } from "@/lib/cards";
 import Err from "@/components/Err";
 import SubmitButton from "@/components/SubmitButton";
 import { PageHeader } from "@/components/ui";
+import Amt from "@/components/Amt";
 
 const day = z.coerce.number().int().min(1, "El día tiene que estar entre 1 y 31").max(31, "El día tiene que estar entre 1 y 31");
 
@@ -78,8 +79,8 @@ export default async function Tarjetas({ searchParams }: { searchParams: { e?: s
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${own ? "bg-primary/10 text-primary" : "bg-warn/15 text-warn"}`}>{own ? "Mía" : `De ${c.owner.name}`}</span>
                 </div>
                 <div>
-                  <div className="flex justify-between text-xs"><span className="text-muted">Disponible</span><span className="text-muted">Límite {fmt(c.limit)}</span></div>
-                  <p className="text-xl font-semibold">{fmt(c.limit - used)}</p>
+                  <div className="flex justify-between text-xs"><span className="text-muted">Disponible</span><span className="text-muted">Límite <Amt>{fmt(c.limit)}</Amt></span></div>
+                  <p className="text-xl font-semibold"><Amt>{fmt(c.limit - used)}</Amt></p>
                   <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line" role="img" aria-label={`${pct}% del límite usado`}>
                     <div className={`h-full ${pct > 85 ? "bg-neg" : "bg-primary"}`} style={{ width: `${Math.min(100, pct)}%` }} />
                   </div>
