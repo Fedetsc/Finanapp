@@ -91,6 +91,8 @@ model Account {
   ownerMemberId    String
   name             String
   type             AccountType
+  /// Código de moneda: ARS, USD, USD_MEP, EUR u otro escrito por el usuario. Saldos y movimientos van en esta moneda.
+  currency         String            @default("ARS")
   openingBalance   BigInt            @default(0)
   createdAt        DateTime          @default(now())
   household        Household         @relation(fields: [householdId], references: [id])
@@ -125,7 +127,13 @@ model Transaction {
   /// Null en TRANSFER: las transferencias no llevan categoría.
   categoryId     String?
   type           TxType
+  /// En la moneda de la cuenta origen (accountId).
   amount         BigInt
+  /// Solo en TRANSFER: monto acreditado en la cuenta destino, en su moneda. Null en transferencias viejas (= amount).
+  toAmount       BigInt?
+  /// Solo en TRANSFER entre monedas distintas: tipo de cambio que cargó el usuario.
+  /// Si una de las dos es ARS: pesos por 1 unidad de la otra moneda. Si no: unidades de destino por 1 de origen.
+  exchangeRate   Decimal?      @db.Decimal(20, 6)
   date           DateTime      @db.Date
   description    String        @default("")
   voidedAt       DateTime?

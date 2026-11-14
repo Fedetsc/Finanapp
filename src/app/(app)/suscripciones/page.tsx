@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
 import { fdate, fmt, parseDate, toCents } from "@/lib/util";
+import { currencyName, money } from "@/lib/currency";
 import { CYCLES, iso, rollForward } from "@/lib/dates";
 import { processDueSubscriptions, today } from "@/lib/billing";
 import Err from "@/components/Err";
@@ -43,12 +44,13 @@ async function save(fd: FormData) {
     const acc = await db.account.findUnique({ where: { id: f.accountId } });
     if (!acc || acc.householdId !== m.householdId) throw new Error("Elegí una cuenta válida");
     if (acc.ownerMemberId !== m.id) throw new Error("No podés usar la cuenta de otro miembro");
-    const data = { name: f.name, amount, cycle: f.cycle, nextPaymentDate, accountId: acc.id, isActive: f.isActive === "on" };
+    // La suscripción se cobra en la moneda de la cuenta adherida.
+    const data = { name: f.name, amount, currency: acc.currency, cycle: f.cycle, nextPaymentDate, accountId: acc.id, isActive: f.isActive === "on" };
     if (f.id) {
       await mine(f.id, m);
       await db.subscription.update({ where: { id: f.id }, data });
     } else {
-      await db.subscription.create({ data: { ...data, householdId: m.householdId, memberId: m.id, currency: "ARS" } });
+      await db.subscription.create({ data: { ...data, householdId: m.householdId, memberId: m.id } });
     }
   } catch (e) { fail(PATH, e); }
   revalidatePath("/", "layout");
@@ -92,11 +94,14 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
   const where = { householdId: m.householdId };
   const all = searchParams.ver === "todas";
   const [accounts, subs] = await Promise.all([
-    db.account.findMany({ where: { ...where, ownerMemberId: m.id }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.account.findMany({ where: { ...where, ownerMemberId: m.id }, orderBy: { name: "asc" }, select: { id: true, name: true, currency: true } }),
     db.subscription.findMany({ where: { ...where, ...(all ? {} : { isActive: true }) }, orderBy: [{ isActive: "desc" }, { nextPaymentDate: "asc" }], include: { account: true, member: true } }),
   ]);
   const editing = subs.find((s) => s.id === searchParams.editar && s.memberId === m.id) ?? null;
-  const monthly = subs.filter((s) => s.isActive).reduce((t, s) => t + (s.cycle === "MONTHLY" ? s.amount : s.cycle === "YEARLY" ? s.amount / 12n : (s.amount * 52n) / 12n), 0n);
+  // Estimado mensual por moneda (no se suman monedas distintas).
+  const monthlyBy = new Map<string, bigint>();
+  subs.filter((s) => s.isActive).forEach((s) => { const c = s.account.currency; monthlyBy.set(c, (monthlyBy.get(c) ?? 0n) + (s.cycle === "MONTHLY" ? s.amount : s.cycle === "YEARLY" ? s.amount / 12n : (s.amount * 52n) / 12n)); });
+  const monthly = [...monthlyBy].filter(([, v]) => v > 0n).map(([c, v]) => money(v, c)).join(" + ");
   const chip = (on: boolean) => `pill ${on ? "pill-on" : ""}`;
 
   return (
@@ -121,7 +126,7 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
             <input name="nextPaymentDate" type="date" required defaultValue={editing ? iso(editing.nextPaymentDate) : undefined} className="input mt-1" />
           </label>
           <label className="text-xs text-muted">Se debita de (tu cuenta)
-            <select name="accountId" required defaultValue={editing?.accountId} className="input mt-1">{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+            <select name="accountId" required defaultValue={editing?.accountId} className="input mt-1">{accounts.map((a) => <option key={a.id} value={a.id}>{a.currency === "ARS" ? a.name : `${a.name} · ${currencyName(a.currency)}`}</option>)}</select>
           </label>
           <label className="flex items-center gap-2 self-end pb-2.5 text-sm"><input type="checkbox" name="isActive" defaultChecked={editing ? editing.isActive : true} className="h-4 w-4 accent-[rgb(var(--primary))]" />Activa</label>
           <div className="flex gap-2 md:col-span-3">
@@ -136,7 +141,7 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
           <Link href={PATH} aria-current={!all ? "page" : undefined} className={chip(!all)}>Activas</Link>
           <Link href={`${PATH}?ver=todas`} aria-current={all ? "page" : undefined} className={chip(all)}>Todas</Link>
         </nav>
-        {monthly > 0n && <p className="text-xs text-muted">≈ {fmt(monthly)} por mes en suscripciones activas</p>}
+        {monthly && <p className="text-xs text-muted">≈ {monthly} por mes en suscripciones activas</p>}
       </div>
 
       {subs.length === 0 ? (
@@ -154,7 +159,7 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${s.isActive ? "bg-pos/10 text-pos" : "bg-line text-muted"}`}>{s.isActive ? "Activa" : "Pausada"}</span>
                 </div>
-                <p className="text-xl font-semibold">{fmt(s.amount)}</p>
+                <p className="text-xl font-semibold">{money(s.amount, s.account.currency)}</p>
                 <dl className="grid grid-cols-2 gap-1 text-xs">
                   <div><dt className="text-muted">Próximo pago</dt><dd>{s.isActive ? fdate(s.nextPaymentDate) : "—"}</dd></div>
                   <div><dt className="text-muted">Último cobro</dt><dd>{s.lastChargedDate ? fdate(s.lastChargedDate) : "Todavía no"}</dd></div>

@@ -1,4 +1,4 @@
-import { fmt } from "@/lib/util";
+import { money } from "@/lib/currency";
 import { categoryVisual } from "@/lib/visuals";
 import { Icon, IconTile } from "./ui";
 
@@ -6,11 +6,12 @@ export type RowTx = {
   id: string;
   type: string;
   amount: bigint;
+  toAmount?: bigint | null;
   description: string;
   voidedAt: Date | null;
   category: { name: string } | null;
-  account: { name: string };
-  toAccount: { name: string } | null;
+  account: { name: string; currency: string };
+  toAccount: { name: string; currency: string } | null;
   member: { name: string };
 };
 
@@ -26,6 +27,8 @@ export default function MovementRow({ t, when, chips = false, action }: { t: Row
   const voided = !!t.voidedAt;
   const color = voided ? "text-muted line-through" : transfer ? "text-primary" : t.type === "INCOME" ? "text-pos" : "text-neg";
   const sign = transfer ? "" : t.type === "INCOME" ? "+" : "-";
+  // Transferencia entre monedas distintas: también se muestra lo que llegó a destino.
+  const fx = transfer && t.toAccount && t.toAccount.currency !== t.account.currency && t.toAmount != null;
 
   return (
     <div className="flex items-center gap-3.5 py-3.5">
@@ -45,7 +48,8 @@ export default function MovementRow({ t, when, chips = false, action }: { t: Row
         )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-0.5">
-        <span className={`text-[15px] font-bold tabular-nums ${color}`}>{sign}{fmt(t.amount)}</span>
+        <span className={`text-[15px] font-bold tabular-nums ${color}`}>{sign}{money(t.amount, t.account.currency)}</span>
+        {fx && <span className="text-[11px] text-muted tabular-nums">→ {money(t.toAmount!, t.toAccount!.currency)}</span>}
         {action}
       </div>
     </div>

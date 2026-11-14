@@ -108,7 +108,7 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
   const own = card.ownerMemberId === m.id;
   const [purchases, accounts, pending] = await Promise.all([
     db.creditCardPurchase.findMany({ where: { cardId: card.id }, orderBy: [{ purchaseDate: "desc" }, { createdAt: "desc" }], include: { installments: { orderBy: { number: "asc" } }, member: { select: { name: true } } } }),
-    own ? db.account.findMany({ where: { householdId: m.householdId, ownerMemberId: m.id }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : Promise.resolve([]),
+    own ? db.account.findMany({ where: { householdId: m.householdId, ownerMemberId: m.id, currency: "ARS" }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : Promise.resolve([]),
     pendingByCard([card.id]),
   ]);
 
@@ -137,7 +137,7 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
         <Stat l="Esperando confirmación" v={String(awaiting.length)} c={awaiting.length ? "text-warn" : ""} />
       </div>
 
-      {own && accounts.length === 0 && <p className="card text-sm text-muted">Para pagar cuotas necesitás <a href="/cuentas" className="text-primary underline">una cuenta tuya</a>.</p>}
+      {own && accounts.length === 0 && <p className="card text-sm text-muted">Para pagar cuotas necesitás <a href="/cuentas" className="text-primary underline">una cuenta tuya en ARS</a>.</p>}
 
       {awaiting.length > 0 && (
         <section className="card space-y-2">

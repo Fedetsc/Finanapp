@@ -20,7 +20,7 @@ export default async function Resumen({ searchParams }: { searchParams: { mes?: 
   const prev = shift(mes, -1);
 
   const rows = await db.transaction.findMany({
-    where: { householdId: m.householdId, voidedAt: null, type, date: { gte: start(prev), lt: start(shift(mes, 1)) } },
+    where: { householdId: m.householdId, voidedAt: null, type, account: { currency: "ARS" }, date: { gte: start(prev), lt: start(shift(mes, 1)) } },
     select: { amount: true, date: true, category: { select: { name: true } } },
   });
   const inMes = rows.filter((r) => r.date.toISOString().startsWith(mes));
@@ -35,7 +35,7 @@ export default async function Resumen({ searchParams }: { searchParams: { mes?: 
 
   return (
     <div>
-      <PageHeader title="Resumen" subtitle={m.household.name} right={
+      <PageHeader title="Resumen" subtitle={`${m.household.name} · cuentas en ARS`} right={
         <div className="pill gap-1 px-1.5">
           <Link href={q({ mes: prev })} aria-label="Mes anterior" className="rounded-full p-1.5 hover:bg-bg"><Icon name="chevronLeft" className="h-4 w-4" /></Link>
           <span className="min-w-[7.5rem] text-center">{monthLabel(mes)}</span>

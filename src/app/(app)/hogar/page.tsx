@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { listMemberships, requireMember, roleLabel, isAdmin } from "@/lib/session";
 import { logout } from "@/lib/household-actions";
 import { accountBalances } from "@/lib/balances";
-import { fmt } from "@/lib/util";
+import { money } from "@/lib/currency";
 import { ACCOUNT_VISUAL } from "@/lib/visuals";
 import HouseholdSwitcher from "@/components/HouseholdSwitcher";
 import CopyButton from "@/components/CopyButton";
@@ -22,7 +22,7 @@ export default async function Hogar() {
   const m = await requireMember();
   const [members, accounts, balances, all] = await Promise.all([
     db.member.findMany({ where: { householdId: m.householdId }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, role: true } }),
-    db.account.findMany({ where: { householdId: m.householdId, ownerMemberId: m.id }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, type: true, openingBalance: true } }),
+    db.account.findMany({ where: { householdId: m.householdId, ownerMemberId: m.id }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, type: true, currency: true, openingBalance: true } }),
     accountBalances(m.householdId),
     listMemberships(m.userId),
   ]);
@@ -67,7 +67,7 @@ export default async function Hogar() {
               <li key={a.id} className="flex items-center gap-3.5 py-3.5">
                 <IconTile icon={v.icon} tone={v.tone} />
                 <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{a.name}</span><span className="text-xs text-muted">Personal</span></span>
-                <span className="font-bold tabular-nums">{fmt(balances.get(a.id) ?? a.openingBalance)}</span>
+                <span className="font-bold tabular-nums">{money(balances.get(a.id) ?? a.openingBalance, a.currency)}</span>
               </li>
             );
           })}

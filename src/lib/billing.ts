@@ -67,6 +67,8 @@ export async function payInstallments(m: { id: string; userId: string; household
   const [acc, card] = await Promise.all([db.account.findUnique({ where: { id: accountId } }), db.creditCard.findUnique({ where: { id: cardId } })]);
   if (!acc || acc.householdId !== m.householdId) throw new Error("Elegí una cuenta válida");
   if (acc.ownerMemberId !== m.id) throw new Error("No podés usar la cuenta de otro miembro");
+  // Las cuotas están en pesos: se pagan con una cuenta en ARS.
+  if (acc.currency !== "ARS") throw new Error("Las cuotas se pagan con una cuenta en ARS");
   if (!card || card.householdId !== m.householdId) throw new Error("Tarjeta no encontrada");
   if (card.ownerMemberId !== m.id) throw new Error("No podés pagar la tarjeta de otro miembro");
   const allowed: ("PENDING" | "AWAITING_CONFIRMATION")[] = onlyAwaiting ? ["AWAITING_CONFIRMATION"] : ["PENDING", "AWAITING_CONFIRMATION"];

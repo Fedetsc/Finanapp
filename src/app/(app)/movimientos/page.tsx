@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
 import Link from "next/link";
-import { fmt, parseDate, toCents, todayAR } from "@/lib/util";
+import { parseDate, toCents, todayAR } from "@/lib/util";
+import { convert, money, parseRate, rateToDecimal } from "@/lib/currency";
 import { relDay } from "@/lib/visuals";
 import MovementRow from "@/components/MovementRow";
 import { Avatar, Empty, Icon, Notice, PageHeader } from "@/components/ui";
@@ -16,7 +17,7 @@ import { today } from "@/lib/billing";
 const base = { amount: z.string(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), accountId: z.string().min(1), description: z.string().trim().max(120) };
 const Form = z.discriminatedUnion("type", [
   z.object({ type: z.enum(["INCOME", "EXPENSE"]), categoryId: z.string().min(1), ...base }),
-  z.object({ type: z.literal("TRANSFER"), toAccountId: z.string().min(1), ...base }),
+  z.object({ type: z.literal("TRANSFER"), toAccountId: z.string().min(1), exchangeRate: z.string().optional(), ...base }),
 ]);
 
 async function add(fd: FormData) {
@@ -33,14 +34,23 @@ async function add(fd: FormData) {
     if (!acc || acc.householdId !== m.householdId) throw new Error("Elegí una cuenta válida");
     if (acc.ownerMemberId !== m.id) throw new Error("No podés usar la cuenta de otro miembro");
 
-    let data: { categoryId: string; toAccountId?: never } | { toAccountId: string; categoryId?: never };
+    let data: { categoryId: string } | { toAccountId: string; toAmount: bigint; exchangeRate: string | null };
     let description = f.description;
     if (f.type === "TRANSFER") {
       // Destino: cualquier cuenta del hogar (también la del otro miembro), distinta del origen.
       const to = await db.account.findUnique({ where: { id: f.toAccountId } });
       if (!to || to.householdId !== m.householdId) throw new Error("Elegí una cuenta de destino válida");
       if (to.id === acc.id) throw new Error("La cuenta de origen y la de destino tienen que ser distintas");
-      data = { toAccountId: to.id };
+      if (to.currency === acc.currency) {
+        data = { toAccountId: to.id, toAmount: amount, exchangeRate: null };
+      } else {
+        // Monedas distintas: el usuario carga el tipo de cambio y se guarda junto con el monto que llega a destino.
+        if (!f.exchangeRate?.trim()) throw new Error("Poné el tipo de cambio para transferir entre monedas distintas");
+        const rate = parseRate(f.exchangeRate);
+        const toAmount = convert(amount, acc.currency, to.currency, rate);
+        if (toAmount <= 0n) throw new Error("Con ese tipo de cambio el monto en destino da cero");
+        data = { toAccountId: to.id, toAmount, exchangeRate: rateToDecimal(rate) };
+      }
       description ||= "Transferencia";
     } else {
       const cat = await db.category.findFirst({ where: { id: f.categoryId, householdId: m.householdId } });
@@ -83,28 +93,32 @@ export default async function Movimientos({ searchParams }: { searchParams: { e?
   const m = await requireMember();
   const where = { householdId: m.householdId };
   const [accounts, categories, members] = await Promise.all([
-    db.account.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, ownerMemberId: true, owner: { select: { name: true } } } }),
+    db.account.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, currency: true, ownerMemberId: true, owner: { select: { name: true } } } }),
     db.category.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.member.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   // Filtro por miembro (pills): solo de los miembros de este hogar.
   const quien = members.some((x) => x.id === searchParams.quien) ? searchParams.quien : undefined;
   const txs = await db.transaction.findMany({ where: { ...where, ...(quien ? { memberId: quien } : {}) }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 50, include: { category: true, account: true, toAccount: true, member: true } });
-  const mine = accounts.filter((a) => a.ownerMemberId === m.id).map(({ id, name }) => ({ id, name }));
-  const byOwner = new Map<string, { id: string; name: string }[]>();
-  accounts.filter((a) => a.ownerMemberId !== m.id).forEach((a) => byOwner.set(a.owner.name, [...(byOwner.get(a.owner.name) ?? []), { id: a.id, name: a.name }]));
+  const mine = accounts.filter((a) => a.ownerMemberId === m.id).map(({ id, name, currency }) => ({ id, name, currency }));
+  const byOwner = new Map<string, { id: string; name: string; currency: string }[]>();
+  accounts.filter((a) => a.ownerMemberId !== m.id).forEach((a) => byOwner.set(a.owner.name, [...(byOwner.get(a.owner.name) ?? []), { id: a.id, name: a.name, currency: a.currency }]));
   const others = [...byOwner].map(([owner, accounts]) => ({ owner, accounts }));
 
-  // Agrupado por día ("Hoy", "Ayer", "12 nov") con el neto del día (sin transferencias ni anulados).
+  // Agrupado por día ("Hoy", "Ayer", "12 nov") con el neto del día por moneda (sin transferencias ni anulados).
   const todayIso = todayAR();
-  const groups: { label: string; net: bigint; items: typeof txs }[] = [];
+  const groups: { label: string; net: Map<string, bigint>; items: typeof txs }[] = [];
   for (const t of txs) {
     const label = relDay(t.date, todayIso);
     let g = groups[groups.length - 1];
-    if (!g || g.label !== label) groups.push((g = { label, net: 0n, items: [] }));
+    if (!g || g.label !== label) groups.push((g = { label, net: new Map(), items: [] }));
     g.items.push(t);
-    if (!t.voidedAt && t.type !== "TRANSFER") g.net += t.type === "INCOME" ? t.amount : -t.amount;
+    if (!t.voidedAt && t.type !== "TRANSFER") g.net.set(t.account.currency, (g.net.get(t.account.currency) ?? 0n) + (t.type === "INCOME" ? t.amount : -t.amount));
   }
+  const netLabel = (net: Map<string, bigint>) => {
+    const parts = [...net].filter(([, v]) => v !== 0n).map(([cur, v]) => (v > 0n ? "+" : "-") + money(v < 0n ? -v : v, cur));
+    return parts.length ? parts.join(" · ") : money(0n);
+  };
   const people = [...members.filter((x) => x.id === m.id), ...members.filter((x) => x.id !== m.id)];
 
   return (
@@ -135,7 +149,7 @@ export default async function Movimientos({ searchParams }: { searchParams: { e?
           <section key={g.label} className="mt-6">
             <div className="mb-2 flex items-baseline justify-between px-1">
               <h2 className="font-bold">{g.label}</h2>
-              <span className="text-sm text-muted tabular-nums">{g.net > 0n ? "+" : g.net < 0n ? "-" : ""}{fmt(g.net < 0n ? -g.net : g.net)}</span>
+              <span className="text-right text-sm text-muted tabular-nums">{netLabel(g.net)}</span>
             </div>
             <ul className="card divide-y divide-line py-1">
               {g.items.map((t) => (

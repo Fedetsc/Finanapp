@@ -8,6 +8,7 @@ import { monthLabel, relDay } from "@/lib/visuals";
 import Charts, { CategoryDonut } from "@/components/Charts";
 import { COLORS, type Slice } from "@/lib/chart-colors";
 import MovementRow from "@/components/MovementRow";
+import { currencyName, money } from "@/lib/currency";
 import CopyButton from "@/components/CopyButton";
 import { AvatarStack, Avatar, HeroCard, Icon, IconTile, Notice, SectionHeader } from "@/components/ui";
 
@@ -27,19 +28,31 @@ export default async function Home() {
     d.setUTCMonth(d.getUTCMonth() - (5 - i));
     return d.toISOString().slice(0, 7);
   });
-  const [txs, balances, vaults, members, recent] = await Promise.all([
-    db.transaction.findMany({ where: { householdId: hid, voidedAt: null, date: { gte: new Date(keys[0] + "-01T00:00:00Z") } }, select: { type: true, amount: true, memberId: true, date: true, category: { select: { name: true } } } }),
+  const monthStart = new Date(now + "-01T00:00:00Z");
+  const [txs, balances, vaults, members, recent, accs, foreignTx] = await Promise.all([
+    // Ingresos, gastos y gráficos: solo cuentas en ARS (no se mezclan monedas ni se convierte nada).
+    db.transaction.findMany({ where: { householdId: hid, voidedAt: null, account: { currency: "ARS" }, date: { gte: new Date(keys[0] + "-01T00:00:00Z") } }, select: { type: true, amount: true, memberId: true, date: true, category: { select: { name: true } } } }),
     accountBalances(hid),
     db.$queryRaw<{ total: bigint | null }[]>`SELECT COALESCE(SUM("currentAmount"), 0)::bigint AS total FROM "SavingsVault" WHERE "householdId" = ${hid}`,
     db.member.findMany({ where: { householdId: hid }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    db.transaction.findMany({ where: { householdId: hid, voidedAt: null }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 5, include: { category: { select: { name: true } }, account: { select: { name: true } }, toAccount: { select: { name: true } }, member: { select: { name: true } } } }),
+    db.transaction.findMany({ where: { householdId: hid, voidedAt: null }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 5, include: { category: { select: { name: true } }, account: { select: { name: true, currency: true } }, toAccount: { select: { name: true, currency: true } }, member: { select: { name: true } } } }),
+    db.account.findMany({ where: { householdId: hid }, select: { id: true, currency: true } }),
+    // Ingresos y gastos del mes en otras monedas: se muestran aparte, cada uno en su moneda.
+    db.transaction.findMany({ where: { householdId: hid, voidedAt: null, type: { in: ["INCOME", "EXPENSE"] }, account: { currency: { not: "ARS" } }, date: { gte: monthStart } }, select: { type: true, amount: true, account: { select: { currency: true } } } }),
   ]);
 
-  // Disponible = suma de los saldos de todas las cuentas (ya descuentan lo apartado y suman lo retirado).
-  // Ahorrado = suma de los sobres. Saldo total = Disponible + Ahorrado: apartar no cambia el total.
-  const disponible = [...balances.values()].reduce((a, b) => a + b, 0n);
+  // Saldos agrupados por moneda: nunca se suman monedas distintas.
+  // Disponible (ARS) = saldos de las cuentas en pesos (ya descuentan lo apartado y suman lo retirado).
+  // Ahorrado = suma de los sobres (en pesos). Total ARS = Disponible + Ahorrado: apartar no cambia el total.
+  const curOf = new Map(accs.map((a) => [a.id, a.currency]));
+  const byCurrency = new Map<string, bigint>();
+  balances.forEach((v, id) => { const c = curOf.get(id) ?? "ARS"; byCurrency.set(c, (byCurrency.get(c) ?? 0n) + v); });
+  const disponible = byCurrency.get("ARS") ?? 0n;
   const ahorrado = vaults[0]?.total ?? 0n;
   const total = disponible + ahorrado;
+  const foreignTotals = [...byCurrency].filter(([c]) => c !== "ARS").sort(([a], [b]) => a.localeCompare(b));
+  const foreignMonth = new Map<string, { inc: bigint; exp: bigint }>();
+  foreignTx.forEach((x) => { const e = foreignMonth.get(x.account.currency) ?? { inc: 0n, exp: 0n }; if (x.type === "INCOME") e.inc += x.amount; else e.exp += x.amount; foreignMonth.set(x.account.currency, e); });
 
   // Ingresos/gastos solo leen Transaction INCOME/EXPENSE: transferencias y ahorro quedan afuera.
   const inMonth = (k: string) => (x: Tx) => x.date.toISOString().startsWith(k);
@@ -95,7 +108,7 @@ export default async function Home() {
       )}
 
       <HeroCard>
-        <p className="text-sm text-white/70">Saldo total</p>
+        <p className="text-sm text-white/70">{foreignTotals.length ? "Total ARS" : "Saldo total"}</p>
         <p className="mt-1 text-[40px] font-extrabold leading-none tracking-tight tabular-nums">{fmt(total)}</p>
         <span className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${balance >= 0n ? "bg-mint/20 text-mint" : "bg-[#FDECEE]/20 text-[#FFB3B6]"}`}>
           <Icon name="trend" className="h-3.5 w-3.5" />{balance >= 0n ? "+" : ""}{fmt(balance)} este mes
@@ -104,6 +117,13 @@ export default async function Home() {
           <div className="rounded-2xl bg-white/10 px-3.5 py-2.5"><dt className="text-[11px] text-white/60">Disponible para gastar</dt><dd className="font-bold tabular-nums">{fmt(disponible)}</dd></div>
           <div className="rounded-2xl bg-white/10 px-3.5 py-2.5"><dt className="text-[11px] text-white/60">Ahorrado</dt><dd className="font-bold tabular-nums">{fmt(ahorrado)}</dd></div>
         </dl>
+        {foreignTotals.length > 0 && (
+          <dl className="mt-3 space-y-1.5 border-t border-white/15 pt-3">
+            {foreignTotals.map(([c, v]) => (
+              <div key={c} className="flex items-baseline justify-between gap-3"><dt className="text-sm text-white/70">Total {currencyName(c)}</dt><dd className="font-bold tabular-nums">{money(v, c)}</dd></div>
+            ))}
+          </dl>
+        )}
       </HeroCard>
 
       <div className="mt-4 grid grid-cols-2 gap-4">
@@ -140,6 +160,12 @@ export default async function Home() {
         <p className="mt-3 px-1 text-xs text-muted">
           {trfCount > 0 && <>Transferencias del mes: {fmt(trf)} en {trfCount} {trfCount === 1 ? "movimiento" : "movimientos"}. </>}
           Las transferencias y lo que apartás o retirás de <Link href="/ahorro" className="underline">ahorro</Link> no cuentan como ingreso ni gasto.
+        </p>
+      )}
+      {foreignMonth.size > 0 && (
+        <p className="mt-3 px-1 text-xs text-muted">
+          Ingresos, gastos y gráficos son en pesos. En otras monedas este mes:{" "}
+          {[...foreignMonth].map(([c, v]) => `${currencyName(c)} +${money(v.inc, c)} / -${money(v.exp, c)}`).join(" · ")}.
         </p>
       )}
 

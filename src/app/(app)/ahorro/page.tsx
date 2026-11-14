@@ -20,6 +20,8 @@ async function ownAccount(id: string, m: M) {
   const a = await db.account.findUnique({ where: { id } });
   if (!a || a.householdId !== m.householdId) throw new Error("Elegí una cuenta válida");
   if (a.ownerMemberId !== m.id) throw new Error("No podés usar la cuenta de otro miembro");
+  // Los ahorros están en pesos: no se mezclan con cuentas en otra moneda.
+  if (a.currency !== "ARS") throw new Error("Por ahora solo se puede apartar o retirar con cuentas en ARS");
   return a;
 }
 
@@ -111,7 +113,7 @@ export default async function Ahorro({ searchParams }: { searchParams: { e?: str
   const where = { householdId: m.householdId };
   const [vaults, accounts, balances, moves] = await Promise.all([
     db.savingsVault.findMany({ where, orderBy: [{ isActive: "desc" }, { createdAt: "asc" }], include: { member: { select: { name: true } } } }),
-    db.account.findMany({ where: { ...where, ownerMemberId: m.id }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.account.findMany({ where: { ...where, ownerMemberId: m.id, currency: "ARS" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     accountBalances(m.householdId),
     db.savingsMovement.findMany({ where, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 20, include: { vault: true, account: true, member: true } }),
   ]);
@@ -171,7 +173,7 @@ export default async function Ahorro({ searchParams }: { searchParams: { e?: str
         </ul>
       )}
 
-      {accounts.length === 0 && <p className="card text-sm text-muted">Para apartar o retirar necesitás <a href="/cuentas" className="text-primary underline">una cuenta tuya</a>.</p>}
+      {accounts.length === 0 && <p className="card text-sm text-muted">Para apartar o retirar necesitás <a href="/cuentas" className="text-primary underline">una cuenta tuya en ARS</a>.</p>}
 
       {canMove && (
         <div className="grid gap-3 md:grid-cols-2">
