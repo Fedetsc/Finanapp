@@ -65,10 +65,12 @@ model Household {
 
 model Member {
   id            String               @id @default(uuid())
-  userId        String               @unique
+  /// Un usuario puede ser miembro de varios hogares (uno por hogar).
+  userId        String
   householdId   String
   name          String
   role          String               @default("MEMBER")
+  createdAt     DateTime             @default(now())
   household     Household            @relation(fields: [householdId], references: [id])
   transactions  Transaction[]
   accounts      Account[]
@@ -78,6 +80,7 @@ model Member {
   savingsVaults SavingsVault[]
   savingsMoves  SavingsMovement[]
 
+  @@unique([userId, householdId])
   @@index([userId])
   @@index([householdId])
 }
