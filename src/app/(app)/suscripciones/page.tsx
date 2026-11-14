@@ -9,6 +9,7 @@ import { fdate, fmt, parseDate, toCents } from "@/lib/util";
 import { CYCLES, iso, rollForward } from "@/lib/dates";
 import { processDueSubscriptions, today } from "@/lib/billing";
 import Err from "@/components/Err";
+import { PageHeader } from "@/components/ui";
 
 const PATH = "/suscripciones";
 const Form = z.object({
@@ -95,12 +96,12 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
   ]);
   const editing = subs.find((s) => s.id === searchParams.editar && s.memberId === m.id) ?? null;
   const monthly = subs.filter((s) => s.isActive).reduce((t, s) => t + (s.cycle === "MONTHLY" ? s.amount : s.cycle === "YEARLY" ? s.amount / 12n : (s.amount * 52n) / 12n), 0n);
-  const chip = (on: boolean) => `rounded-full border px-3 py-1.5 text-sm ${on ? "border-primary bg-primary text-surface" : "border-line text-muted"}`;
+  const chip = (on: boolean) => `pill ${on ? "pill-on" : ""}`;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Suscripciones</h1>
+        <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Suscripciones" />
         <form action={processNow}><button className="rounded-lg border border-line px-3 py-1.5 text-sm text-muted hover:text-text">Procesar vencimientos</button></form>
       </div>
       <Err e={searchParams.e} />

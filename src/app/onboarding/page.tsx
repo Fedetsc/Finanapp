@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { fail } from "@/lib/action";
 import { listMemberships, requireUser, roleLabel, setHouseholdCookie } from "@/lib/session";
 import Err from "@/components/Err";
+import AuthShell from "@/components/AuthShell";
+import { Icon, IconTile } from "@/components/ui";
 
 const CATEGORIES = ["Vivienda", "Alimentación", "Supermercado", "Servicios", "Transporte", "Combustible", "Salud", "Entretenimiento", "Compras", "Educación", "Mascotas", "Finanzas", "Impuestos", "Ahorros", "Sueldo", "Otros"];
 const Me = z.string().trim().min(1, "Poné tu nombre").max(40);
@@ -54,35 +56,50 @@ export default async function Onboarding({ searchParams }: { searchParams: { e?:
   const lastName = memberships.length ? (await db.member.findFirst({ where: { userId: u.id }, orderBy: { createdAt: "desc" }, select: { name: true } }))?.name : undefined;
   const suggested = lastName ?? u.email?.split("@")[0] ?? "";
 
+  // Opción desplegable estilo ejemplo: ícono, título, subtítulo y flecha; adentro el formulario.
+  const Option = ({ icon, tone, title, hint, open, children }: { icon: string; tone: "navy" | "green"; title: string; hint: string; open?: boolean; children: React.ReactNode }) => (
+    <details name="opcion" open={open} className="group rounded-[20px] border-2 border-transparent bg-surface shadow-soft open:border-primary">
+      <summary className="flex cursor-pointer list-none items-center gap-4 p-4 [&::-webkit-details-marker]:hidden">
+        <IconTile icon={icon} tone={tone} size="lg" />
+        <span className="min-w-0 flex-1"><span className="block font-bold">{title}</span><span className="block text-sm text-muted">{hint}</span></span>
+        <Icon name="chevronRight" className="h-5 w-5 text-muted transition group-open:rotate-90 group-open:text-primary" />
+      </summary>
+      <div className="px-4 pb-4">{children}</div>
+    </details>
+  );
+
   return (
-    <main className="mx-auto max-w-md space-y-4 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-primary">Tu hogar</h1>
-        <p className="mt-1 text-sm text-muted">{memberships.length ? "Creá otro hogar o unite a uno con un código." : "Para empezar, creá un hogar o unite al de tu pareja con su código."}</p>
-      </div>
+    <AuthShell
+      icon="users"
+      title={<>Las cuentas de casa,<br />más simples juntos</>}
+      subtitle={memberships.length ? "Creá otro hogar o unite a uno con un código." : "Registrá gastos en segundos y mantené a tu pareja o familia en la misma página."}
+    >
       <Err e={searchParams.e} />
 
       {memberships.length > 0 && (
-        <div className="card text-sm">
-          <p className="text-xs text-muted">Ya sos parte de:</p>
-          <ul className="mt-1 space-y-0.5">{memberships.map((x) => <li key={x.householdId}>{x.household.name} <span className="text-xs text-muted">· {roleLabel(x.role)}</span></li>)}</ul>
-          <Link href="/" className="mt-2 inline-block text-primary underline">Volver a la app</Link>
+        <div className="card mb-4">
+          <p className="text-xs font-medium text-muted">Ya sos parte de</p>
+          <ul className="mt-2 space-y-1.5">{memberships.map((x) => <li key={x.householdId} className="flex items-center gap-2 text-sm"><IconTile icon="home" tone="gray" size="sm" /><span className="flex-1 truncate font-semibold">{x.household.name}</span><span className="text-xs text-muted">{roleLabel(x.role)}</span></li>)}</ul>
+          <Link href="/" className="btn-ghost mt-3 w-full">Volver a la app</Link>
         </div>
       )}
 
-      <form action={create} className="card space-y-3">
-        <h2 className="font-medium">Crear un hogar nuevo</h2>
-        <input name="name" required maxLength={60} placeholder="Nombre del hogar" className="input" />
-        <input name="me" required maxLength={40} defaultValue={suggested} placeholder="Tu nombre en este hogar" aria-label="Tu nombre en este hogar" className="input" />
-        <button className="btn w-full">Crear</button>
-      </form>
-
-      <form action={join} className="card space-y-3">
-        <h2 className="font-medium">Unirme a un hogar existente</h2>
-        <input name="code" required placeholder="Código de invitación" autoComplete="off" className="input font-mono" />
-        <input name="me" required maxLength={40} defaultValue={suggested} placeholder="Tu nombre en este hogar" aria-label="Tu nombre en este hogar" className="input" />
-        <button className="btn w-full">Unirse</button>
-      </form>
-    </main>
+      <div className="space-y-3">
+        <Option icon="home" tone="navy" title="Crear un nuevo hogar" hint="Invitá a tu pareja o familia después" open={memberships.length === 0}>
+          <form action={create} className="space-y-3">
+            <input name="name" required maxLength={60} placeholder="Nombre del hogar" aria-label="Nombre del hogar" className="input bg-bg" />
+            <input name="me" required maxLength={40} defaultValue={suggested} placeholder="Tu nombre en este hogar" aria-label="Tu nombre en este hogar" className="input bg-bg" />
+            <button className="btn w-full py-4 text-base">Crear</button>
+          </form>
+        </Option>
+        <Option icon="key" tone="green" title="Unirme con un código" hint="Ya tienen un hogar creado">
+          <form action={join} className="space-y-3">
+            <input name="code" required placeholder="Código de invitación" aria-label="Código de invitación" autoComplete="off" className="input bg-bg text-center font-mono" />
+            <input name="me" required maxLength={40} defaultValue={suggested} placeholder="Tu nombre en este hogar" aria-label="Tu nombre en este hogar" className="input bg-bg" />
+            <button className="btn w-full bg-mint py-4 text-base text-primary hover:bg-mint/90">Unirse</button>
+          </form>
+        </Option>
+      </div>
+    </AuthShell>
   );
 }

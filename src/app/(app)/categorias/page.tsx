@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
 import Err from "@/components/Err";
+import { PageHeader } from "@/components/ui";
 
 async function add(fd: FormData) {
   "use server";
@@ -31,7 +32,7 @@ export default async function Categorias({ searchParams }: { searchParams: { e?:
   const cats = await db.category.findMany({ where: { householdId: m.householdId }, orderBy: { name: "asc" } });
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Categorías</h1>
+      <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Categorías" />
       <Err e={searchParams.e} />
       <form key={searchParams.ok} action={add} className="card flex gap-3">
         <input name="name" required maxLength={40} placeholder="Nueva categoría" className="input" />

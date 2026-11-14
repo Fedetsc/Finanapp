@@ -2,13 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { --bg: 245 246 248; --surface: 255 255 255; --text: 32 39 51; --muted: 119 128 141; --primary: 51 75 103; --secondary: 100 123 145; --pos: 33 134 91; --neg: 198 83 83; --warn: 217 164 65; --line: 229 232 237; }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: 15 19 26; --surface: 24 30 40; --text: 233 237 243; --muted: 140 150 163; --primary: 122 158 196; --secondary: 100 123 145; --pos: 63 178 128; --neg: 224 112 112; --warn: 226 183 98; --line: 42 50 63; }
+/* Sistema de diseño claro (tomado del ejemplo de UX Pilot). Canales RGB para usar con /opacidad en Tailwind. */
+:root {
+  color-scheme: light;
+  --bg: 245 246 248;        /* #F5F6F8 fondo general */
+  --surface: 255 255 255;   /* #FFFFFF cards */
+  --text: 30 43 58;         /* #1E2B3A texto principal */
+  --muted: 138 148 163;     /* #8A94A3 texto secundario */
+  --primary: 45 74 99;      /* #2D4A63 azul petróleo */
+  --primary-2: 62 101 112;  /* #3E6570 círculo decorativo de la card principal */
+  --secondary: 106 147 179; /* #6A93B3 azul acero */
+  --pos: 46 139 98;         /* #2E8B62 ingresos */
+  --mint: 143 217 182;      /* #8FD9B6 acento menta */
+  --mint-soft: 230 245 238; /* #E6F5EE fondo menta */
+  --neg: 229 72 77;         /* #E5484D gastos */
+  --warn: 217 140 31;       /* #D98C1F avisos */
+  --line: 236 238 242;      /* #ECEEF2 separadores */
 }
+
 body { @apply bg-bg text-text antialiased; }
+
 @layer components {
-  .card { @apply rounded-xl border border-line bg-surface p-4 shadow-sm; }
-  .btn { @apply rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-surface transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary; }
-  .input { @apply w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm placeholder:text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary; }
+  .card { @apply rounded-[20px] bg-surface p-5 shadow-soft; }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition
+      hover:bg-primary/90 active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-60
+      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-surface px-5 py-3 text-sm font-semibold text-primary shadow-soft transition hover:bg-bg
+      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+  }
+  .input {
+    @apply w-full rounded-2xl border border-line bg-surface px-4 py-3 text-sm text-text placeholder:text-muted transition
+      focus:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10;
+  }
+  .chip { @apply inline-flex items-center gap-1 rounded-full bg-bg px-2.5 py-0.5 text-[11px] font-medium text-muted; }
+  .pill { @apply inline-flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium text-text shadow-soft transition hover:bg-white/70; }
+  .pill-on { @apply bg-primary text-white hover:bg-primary; }
+  .label { @apply mb-1.5 block text-xs font-medium text-muted; }
+  .section-title { @apply text-lg font-bold tracking-tight; }
 }

@@ -4,7 +4,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
-import { fdate, fmt, parseDate, toCents, todayAR } from "@/lib/util";
+import Link from "next/link";
+import { fmt, parseDate, toCents, todayAR } from "@/lib/util";
+import { relDay } from "@/lib/visuals";
+import MovementRow from "@/components/MovementRow";
+import { Avatar, Empty, Icon, Notice, PageHeader } from "@/components/ui";
 import Err from "@/components/Err";
 import MovementForm from "@/components/MovementForm";
 import { today } from "@/lib/billing";
@@ -74,55 +78,75 @@ async function voidTx(fd: FormData) {
   revalidatePath("/", "layout");
 }
 
-export default async function Movimientos({ searchParams }: { searchParams: { e?: string; ok?: string } }) {
+export default async function Movimientos({ searchParams }: { searchParams: { e?: string; ok?: string; quien?: string } }) {
   const m = await requireMember();
   const where = { householdId: m.householdId };
-  const [accounts, categories, txs] = await Promise.all([
+  const [accounts, categories, members] = await Promise.all([
     db.account.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true, ownerMemberId: true, owner: { select: { name: true } } } }),
     db.category.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    db.transaction.findMany({ where, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 50, include: { category: true, account: true, toAccount: true, member: true } }),
+    db.member.findMany({ where, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
+  // Filtro por miembro (pills): solo de los miembros de este hogar.
+  const quien = members.some((x) => x.id === searchParams.quien) ? searchParams.quien : undefined;
+  const txs = await db.transaction.findMany({ where: { ...where, ...(quien ? { memberId: quien } : {}) }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 50, include: { category: true, account: true, toAccount: true, member: true } });
   const mine = accounts.filter((a) => a.ownerMemberId === m.id).map(({ id, name }) => ({ id, name }));
   const byOwner = new Map<string, { id: string; name: string }[]>();
   accounts.filter((a) => a.ownerMemberId !== m.id).forEach((a) => byOwner.set(a.owner.name, [...(byOwner.get(a.owner.name) ?? []), { id: a.id, name: a.name }]));
   const others = [...byOwner].map(([owner, accounts]) => ({ owner, accounts }));
 
+  // Agrupado por día ("Hoy", "Ayer", "12 nov") con el neto del día (sin transferencias ni anulados).
+  const todayIso = todayAR();
+  const groups: { label: string; net: bigint; items: typeof txs }[] = [];
+  for (const t of txs) {
+    const label = relDay(t.date, todayIso);
+    let g = groups[groups.length - 1];
+    if (!g || g.label !== label) groups.push((g = { label, net: 0n, items: [] }));
+    g.items.push(t);
+    if (!t.voidedAt && t.type !== "TRANSFER") g.net += t.type === "INCOME" ? t.amount : -t.amount;
+  }
+  const people = [...members.filter((x) => x.id === m.id), ...members.filter((x) => x.id !== m.id)];
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Movimientos</h1>
+    <div>
+      <PageHeader title="Movimientos" subtitle={m.household.name} right={<Link href="#nuevo" className="pill"><Icon name="plus" className="h-4 w-4" />Nuevo</Link>} />
       <Err e={searchParams.e} />
-      {searchParams.ok && <p className="rounded-lg border border-pos/40 bg-pos/10 p-3 text-sm text-pos">Movimiento guardado.</p>}
+      {searchParams.ok && <Notice tone="ok">Movimiento guardado.</Notice>}
+
       {mine.length === 0 ? (
-        <p id="nuevo" className="card text-center text-sm text-muted">Para registrar movimientos, primero <a href="/cuentas" className="text-primary underline">creá una cuenta tuya</a>.</p>
+        <div id="nuevo" className="card text-center text-sm text-muted">Para registrar movimientos, primero <Link href="/cuentas" className="font-semibold text-primary">creá una cuenta tuya</Link>.</div>
       ) : (
-        <MovementForm key={searchParams.ok} action={add} mine={mine} others={others} categories={categories} today={todayAR()} />
+        <MovementForm key={searchParams.ok} action={add} mine={mine} others={others} categories={categories} today={todayIso} me={m.name} />
       )}
+
+      <nav aria-label="Filtrar por miembro" className="-mx-1 mt-7 flex gap-2 overflow-x-auto px-1 pb-1">
+        <Link href="/movimientos" aria-current={!quien ? "page" : undefined} className={`pill shrink-0 ${!quien ? "pill-on" : ""}`}>Todos</Link>
+        {people.map((p) => (
+          <Link key={p.id} href={`/movimientos?quien=${p.id}`} aria-current={quien === p.id ? "page" : undefined} className={`pill shrink-0 pl-1.5 ${quien === p.id ? "pill-on" : ""}`}>
+            <Avatar name={p.name} size="sm" />{p.id === m.id ? `${p.name} (yo)` : p.name}
+          </Link>
+        ))}
+      </nav>
+
       {txs.length === 0 ? (
-        <p className="card text-center text-sm text-muted">Todavía no hay movimientos.</p>
+        <div className="mt-4"><Empty>Todavía no hay movimientos{quien ? " de esta persona" : ""}.</Empty></div>
       ) : (
-        <ul className="card divide-y divide-line py-1">
-          {txs.map((t) => {
-            const transfer = t.type === "TRANSFER";
-            const route = `De ${t.account.name} → A ${t.toAccount?.name ?? "?"}`;
-            const meta = transfer ? [fdate(t.date), route, t.member.name] : [fdate(t.date), t.category?.name, t.account.name, t.member.name];
-            const color = t.voidedAt ? "text-muted line-through" : transfer ? "text-primary" : t.type === "INCOME" ? "text-pos" : "text-neg";
-            return (
-              <li key={t.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <p className={`flex items-center gap-2 text-sm ${t.voidedAt ? "text-muted line-through" : ""}`}>
-                    {transfer && <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary no-underline">Transferencia</span>}
-                    <span className="truncate">{transfer ? (t.description && t.description !== "Transferencia" ? t.description : route) : t.description || t.category?.name}</span>
-                  </p>
-                  <p className="text-xs text-muted">{meta.filter(Boolean).join(" / ")}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className={`text-sm font-medium ${color}`}>{transfer ? "⇄ " : t.type === "EXPENSE" ? "-" : "+"}{fmt(t.amount)}</span>
-                  {!t.voidedAt && <form action={voidTx}><input type="hidden" name="id" value={t.id} /><button className="text-xs text-muted hover:text-neg">Anular</button></form>}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        groups.map((g) => (
+          <section key={g.label} className="mt-6">
+            <div className="mb-2 flex items-baseline justify-between px-1">
+              <h2 className="font-bold">{g.label}</h2>
+              <span className="text-sm text-muted tabular-nums">{g.net > 0n ? "+" : g.net < 0n ? "-" : ""}{fmt(g.net < 0n ? -g.net : g.net)}</span>
+            </div>
+            <ul className="card divide-y divide-line py-1">
+              {g.items.map((t) => (
+                <li key={t.id}>
+                  <MovementRow t={t} chips action={!t.voidedAt ? (
+                    <form action={voidTx}><input type="hidden" name="id" value={t.id} /><button className="text-[11px] font-medium text-muted hover:text-neg">Anular</button></form>
+                  ) : undefined} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
       )}
     </div>
   );

@@ -1,13 +1,14 @@
 import "./globals.css";
-import { Inter } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 
-const inter = Inter({ subsets: ["latin"] });
-export const metadata = { title: "Finanzas del hogar" };
+const sans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans" });
+export const metadata = { title: "Finanapp", description: "Las cuentas de casa, más simples juntos" };
+export const viewport = { themeColor: "#F5F6F8" };
 
 export default function Root({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
-      <body className={inter.className}>{children}</body>
+    <html lang="es" className={sans.variable}>
+      <body className="font-sans">{children}</body>
     </html>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createBrowserClient } from "@supabase/ssr";
 import Err from "@/components/Err";
 import PasswordInput from "@/components/PasswordInput";
+import AuthShell from "@/components/AuthShell";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,37 +33,20 @@ export default function Login() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center p-6">
-      <h1 className="text-2xl font-semibold text-primary">Finanzas del hogar</h1>
-      <p className="mb-6 mt-1 text-sm text-muted">Ingresá a tu cuenta.</p>
+    <AuthShell
+      icon="home"
+      title={<>Las cuentas de casa,<br />más simples juntos</>}
+      subtitle="Ingresá para ver los gastos, cuentas y ahorros de tu hogar."
+      footer={<>¿No tenés cuenta? <Link href="/register" className="font-semibold text-primary">Creá una</Link></>}
+    >
       <Err e={e} />
       <form className="card space-y-3" onSubmit={enter}>
-        <input
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="Correo electrónico"
-          className="input"
-          value={email}
-          onChange={(ev) => setEmail(ev.target.value)}
-        />
-        <PasswordInput
-          name="password"
-          required
-          autoComplete="current-password"
-          placeholder="Contraseña"
-          aria-label="Contraseña"
-          value={password}
-          onChange={(ev) => setPassword(ev.target.value)}
-        />
-        <button type="submit" className="btn w-full" disabled={loading}>
-          {loading ? "Ingresando..." : "Ingresar"}
-        </button>
+        <input name="email" type="email" required autoComplete="email" placeholder="Correo electrónico" aria-label="Correo electrónico"
+          className="input" value={email} onChange={(ev) => setEmail(ev.target.value)} />
+        <PasswordInput name="password" required autoComplete="current-password" placeholder="Contraseña" aria-label="Contraseña"
+          value={password} onChange={(ev) => setPassword(ev.target.value)} />
+        <button type="submit" className="btn w-full py-4 text-base" disabled={loading}>{loading ? "Ingresando..." : "Ingresar"}</button>
       </form>
-      <p className="mt-4 text-center text-sm text-muted">
-        ¿No tenés cuenta? <Link href="/register" className="text-primary underline">Creá una</Link>
-      </p>
-    </main>
+    </AuthShell>
   );
 }

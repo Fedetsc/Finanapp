@@ -7,6 +7,8 @@ import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
 import { ACCOUNT_TYPES, fmt, toCents } from "@/lib/util";
 import Err from "@/components/Err";
+import { IconTile, PageHeader } from "@/components/ui";
+import { ACCOUNT_VISUAL } from "@/lib/visuals";
 import { accountBalances } from "@/lib/balances";
 
 async function add(fd: FormData) {
@@ -42,7 +44,7 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Cuentas</h1>
+      <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Cuentas" subtitle={m.household.name} />
       <Err e={searchParams.e} />
       <form key={searchParams.ok} action={add} className="card grid gap-3 md:grid-cols-4">
         <input name="name" required placeholder="Nombre (ej. Mercado Pago)" className="input md:col-span-2" />
@@ -53,7 +55,7 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
       <nav aria-label="Filtrar cuentas" className="flex flex-wrap gap-2">
         {filters.map(([k, l]) => (
           <Link key={k} href={k === "mias" ? "/cuentas" : `/cuentas?ver=${k}`} aria-current={ver === k ? "page" : undefined}
-            className={`rounded-full border px-3 py-1.5 text-sm ${ver === k ? "border-primary bg-primary text-surface" : "border-line text-muted"}`}>{l}</Link>
+            className={`pill shrink-0 ${ver === k ? "pill-on" : ""}`}>{l}</Link>
         ))}
       </nav>
       {shown.length === 0 ? (
@@ -65,13 +67,13 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
             return (
               <li key={a.id} className="card">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs text-muted">{ACCOUNT_TYPES[a.type]}</p>
+                  <span className="flex min-w-0 items-center gap-3"><IconTile icon={(ACCOUNT_VISUAL[a.type] ?? ACCOUNT_VISUAL.BANK).icon} tone={(ACCOUNT_VISUAL[a.type] ?? ACCOUNT_VISUAL.BANK).tone} /><span className="text-xs text-muted">{ACCOUNT_TYPES[a.type]}</span></span>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${mine ? "bg-primary/10 text-primary" : "bg-warn/15 text-warn"}`}>
                     {mine ? "Mía" : `De ${nameOf.get(a.ownerMemberId) ?? "otro miembro"}`}
                   </span>
                 </div>
-                <p className="font-medium">{a.name}</p>
-                <p className="mt-2 text-xl font-semibold">{fmt(balance(a.id, a.openingBalance))}</p>
+                <p className="mt-3 font-bold">{a.name}</p>
+                <p className="mt-1 text-2xl font-extrabold tracking-tight tabular-nums">{fmt(balance(a.id, a.openingBalance))}</p>
               </li>
             );
           })}

@@ -10,6 +10,7 @@ import { dayOf, installmentSchedule, splitAmount } from "@/lib/dates";
 import { payInstallments, refreshInstallments, today } from "@/lib/billing";
 import { pendingByCard, STATUS_CLS, STATUS_LABEL } from "@/lib/cards";
 import Err from "@/components/Err";
+import { Notice, PageHeader } from "@/components/ui";
 import AdvancePay from "@/components/AdvancePay";
 
 const back = (id: string) => `/tarjetas/${id}`;
@@ -122,14 +123,11 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
 
   return (
     <div className="space-y-4">
-      <div>
-        <Link href="/tarjetas" className="text-sm text-muted hover:text-text">← Tarjetas</Link>
-        <h1 className="mt-1 text-xl font-semibold">{card.name}{card.last4 && <span className="text-muted"> ···· {card.last4}</span>}</h1>
-        <p className="text-sm text-muted">{card.bank} · Cierra el {card.closingDay} · Vence el {card.dueDay}{own ? "" : ` · De ${card.owner.name}`}</p>
-      </div>
+      <PageHeader back={{ href: "/tarjetas", label: "Tarjetas" }} title={<>{card.name}{card.last4 && <span className="text-muted"> ···· {card.last4}</span>}</>} />
+      <p className="-mt-3 mb-4 text-sm text-muted">{card.bank} · Cierra el {card.closingDay} · Vence el {card.dueDay}{own ? "" : ` · De ${card.owner.name}`}</p>
       <Err e={searchParams.e} />
-      {searchParams.ok && <p className="rounded-lg border border-pos/40 bg-pos/10 p-3 text-sm text-pos">Gasto en cuotas agregado.</p>}
-      {searchParams.pagado && <p className="rounded-lg border border-pos/40 bg-pos/10 p-3 text-sm text-pos">Pago registrado. Ya se descontó de tu cuenta.</p>}
+      {searchParams.ok && <Notice tone="ok">Gasto en cuotas agregado.</Notice>}
+      {searchParams.pagado && <Notice tone="ok">Pago registrado. Ya se descontó de tu cuenta.</Notice>}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat l="Límite" v={fmt(card.limit)} />

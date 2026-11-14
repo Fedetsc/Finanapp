@@ -9,6 +9,7 @@ import { fdate, fmt, toCents } from "@/lib/util";
 import { accountBalances } from "@/lib/balances";
 import { today } from "@/lib/billing";
 import Err from "@/components/Err";
+import { PageHeader, Notice } from "@/components/ui";
 
 const PATH = "/ahorro";
 type M = { id: string; householdId: string; userId: string };
@@ -124,13 +125,13 @@ export default async function Ahorro({ searchParams }: { searchParams: { e?: str
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold">Ahorro</h1>
+          <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Ahorro" />
           <p className="text-sm text-muted">Plata apartada: no cuenta como disponible para gastar, ni como ingreso o gasto.</p>
         </div>
         <p className="text-right"><span className="block text-xs text-muted">Ahorrado en el hogar</span><span className="text-xl font-semibold">{fmt(total)}</span></p>
       </div>
       <Err e={searchParams.e} />
-      {searchParams.ok && <p className="rounded-lg border border-pos/40 bg-pos/10 p-3 text-sm text-pos">Listo, se guardó.</p>}
+      {searchParams.ok && <Notice tone="ok">Listo, se guardó.</Notice>}
 
       {vaults.length === 0 ? (
         <p className="card text-center text-sm text-muted">Todavía no hay ahorros. Creá el primero abajo (ej. «Indemnización»).</p>

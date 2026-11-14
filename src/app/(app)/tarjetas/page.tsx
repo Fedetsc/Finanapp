@@ -9,6 +9,7 @@ import { fmt, toCents } from "@/lib/util";
 import { refreshInstallments } from "@/lib/billing";
 import { pendingByCard } from "@/lib/cards";
 import Err from "@/components/Err";
+import { PageHeader } from "@/components/ui";
 
 const day = z.coerce.number().int().min(1, "El día tiene que estar entre 1 y 31").max(31, "El día tiene que estar entre 1 y 31");
 
@@ -44,7 +45,7 @@ export default async function Tarjetas({ searchParams }: { searchParams: { e?: s
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Tarjetas de crédito</h1>
+      <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Tarjetas" subtitle="Tarjetas de crédito" />
       <Err e={searchParams.e} />
       <form key={searchParams.ok} action={add} className="card grid gap-3 md:grid-cols-3">
         <h2 className="text-sm font-medium md:col-span-3">Nueva tarjeta</h2>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createBrowserClient } from "@supabase/ssr";
 import Err from "@/components/Err";
 import PasswordInput from "@/components/PasswordInput";
+import AuthShell from "@/components/AuthShell";
 
 const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -48,17 +49,20 @@ export default function Register() {
     window.location.assign("/onboarding");
   }
 
-  const fieldErr = (msg: string | false, id: string) => (msg ? <p id={id} className="mt-1 text-xs text-neg">{msg}</p> : null);
+  const fieldErr = (msg: string | false, id: string) => (msg ? <p id={id} className="mt-1.5 px-1 text-xs font-medium text-neg">{msg}</p> : null);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center p-6">
-      <h1 className="text-2xl font-semibold text-primary">Crear cuenta</h1>
-      <p className="mb-6 mt-1 text-sm text-muted">Después vas a poder crear tu hogar o unirte a uno.</p>
+    <AuthShell
+      icon="users"
+      title="Creá tu cuenta"
+      subtitle="Después vas a poder crear tu hogar o unirte al de tu pareja o familia."
+      footer={<>¿Ya tenés cuenta? <Link href="/login" className="font-semibold text-primary">Ingresá</Link></>}
+    >
       <Err e={e} />
-      {info && <p className="mb-3 rounded-lg border border-pos/40 bg-pos/10 p-3 text-sm text-pos">{info}</p>}
+      {info && <p role="status" className="mb-4 rounded-2xl bg-mint-soft px-4 py-3 text-sm text-pos">{info}</p>}
       <form className="card space-y-3" onSubmit={submit} noValidate>
         <div>
-          <input name="email" type="email" required autoComplete="email" placeholder="Correo electrónico" value={email}
+          <input name="email" type="email" required autoComplete="email" placeholder="Correo electrónico" aria-label="Correo electrónico" value={email}
             onChange={(ev) => setEmail(ev.target.value)} aria-invalid={!!show("email") || undefined} aria-describedby="err-email"
             className={`input ${show("email") ? "border-neg" : ""}`} />
           {fieldErr(show("email"), "err-email")}
@@ -73,9 +77,8 @@ export default function Register() {
             value={repeat} onChange={(ev) => setRepeat(ev.target.value)} invalid={!!show("repeat")} aria-describedby="err-repeat" aria-label="Repetir contraseña" />
           {fieldErr(show("repeat"), "err-repeat")}
         </div>
-        <button type="submit" className="btn w-full" disabled={loading}>{loading ? "Creando..." : "Crear cuenta"}</button>
+        <button type="submit" className="btn w-full py-4 text-base" disabled={loading}>{loading ? "Creando..." : "Crear cuenta"}</button>
       </form>
-      <p className="mt-4 text-center text-sm text-muted">¿Ya tenés cuenta? <Link href="/login" className="text-primary underline">Ingresá</Link></p>
-    </main>
+    </AuthShell>
   );
 }
