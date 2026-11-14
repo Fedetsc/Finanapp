@@ -4,3 +4,8 @@ node_modules/
 .env.local
 .env*.local
 *.tsbuildinfo
+
+# PWA: service worker generado en el build
+public/sw.js
+public/sw.js.map
+public/swe-worker*.js

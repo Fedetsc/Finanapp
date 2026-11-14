@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
 import { fmt, todayAR } from "@/lib/util";
-import { processDueSubscriptions, refreshInstallments } from "@/lib/billing";
+import { refreshInstallments } from "@/lib/billing";
 import { accountBalances } from "@/lib/balances";
 import { monthLabel } from "@/lib/visuals";
 import Charts, { CategoryDonut } from "@/components/Charts";
@@ -12,7 +12,7 @@ import { currencyName, money } from "@/lib/currency";
 import { arsEquivalent, referenceRates } from "@/lib/rates";
 import { accrueYields } from "@/lib/yields";
 import CopyButton from "@/components/CopyButton";
-import { AvatarStack, Avatar, HeroCard, Icon, IconTile, Notice, SectionHeader } from "@/components/ui";
+import { AvatarStack, Avatar, HeroCard, Icon, IconTile, SectionHeader } from "@/components/ui";
 import Amt, { MASK } from "@/components/Amt";
 
 type Tx = { type: string; amount: bigint; memberId: string; date: Date; category: { name: string } | null };
@@ -20,10 +20,9 @@ type Tx = { type: string; amount: bigint; memberId: string; date: Date; category
 export default async function Home() {
   const m = await requireMember();
   const hid = m.householdId;
-  // Cobros automáticos: las suscripciones vencidas se registran como gasto al entrar al resumen.
   // Las compras con tarjeta no son movimientos: solo cuentan cuando se paga cada cuota.
   // Rendimientos: si el cron no corrió, se acreditan los días pendientes al entrar.
-  const [charged] = await Promise.all([processDueSubscriptions(hid), refreshInstallments(hid), accrueYields(hid)]);
+  await Promise.all([refreshInstallments(hid), accrueYields(hid)]);
 
   const today = todayAR();
   const now = today.slice(0, 7); // mes actual: mismo filtro para el bloque total y los de cada miembro
@@ -96,7 +95,6 @@ export default async function Home() {
         <Link href="/hogar" aria-label="Ver miembros del hogar"><AvatarStack names={people.map((p) => p.name)} /></Link>
       </header>
 
-      {charged > 0 && <Notice tone="ok">Se registraron {charged} cobro(s) de suscripciones. <Link href="/movimientos" className="font-semibold underline">Ver movimientos</Link></Notice>}
 
       {members.length < 2 && (
         <div className="card mb-4 border border-mint/60">

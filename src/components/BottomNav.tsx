@@ -14,8 +14,8 @@ export default function BottomNav() {
     const on = isActive(path, i.href, i.also);
     return (
       <Link key={i.href} href={i.href} aria-current={on ? "page" : undefined}
-        className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold ${on ? "text-primary" : "text-muted/80"}`}>
-        <Icon name={i.icon} className="h-6 w-6" strokeWidth={on ? 2.4 : 2} />{i.label}
+        className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition-colors duration-200 ${on ? "text-primary" : "text-muted/80"}`}>
+        <Icon name={i.icon} className={`h-6 w-6 ${on ? "nav-pop" : ""}`} strokeWidth={on ? 2.4 : 2} />{i.label}
       </Link>
     );
   };
@@ -26,8 +26,8 @@ export default function BottomNav() {
         {LEFT.map(item)}
         <div className="flex w-20 shrink-0 justify-center">
           <Link href={NEW_MOVEMENT} aria-label="Nuevo movimiento" aria-current={adding ? "page" : undefined}
-            className={`-mt-7 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-white shadow-fab ring-4 transition active:scale-95 ${adding ? "ring-mint" : "ring-bg"}`}>
-            <Icon name="plus" className="h-7 w-7" strokeWidth={2.6} />
+            className={`-mt-7 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-white shadow-fab ring-4 transition duration-150 ease-out active:scale-90 ${adding ? "ring-mint" : "ring-bg"}`}>
+            <Icon name="plus" className={`h-7 w-7 ${adding ? "nav-pop" : ""}`} strokeWidth={2.6} />
           </Link>
         </div>
         {RIGHT.map(item)}

@@ -107,7 +107,7 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
       {shown.length === 0 ? (
         <p className="card text-center text-sm text-muted">{empty}</p>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className="stagger grid gap-3 md:grid-cols-2">
           {shown.map((a) => {
             const mine = a.ownerMemberId === m.id;
             return (

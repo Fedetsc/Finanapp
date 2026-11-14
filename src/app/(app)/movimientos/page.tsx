@@ -39,7 +39,7 @@ const PAGE = 30; // movimientos por tanda ("Ver más" suma otra tanda)
 const MAX = 600;
 const isoDate = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
 
-type Search = { e?: string; ok?: string; q?: string; quien?: string; cuenta?: string; cat?: string; tipo?: string; desde?: string; hasta?: string; n?: string };
+type Search = { e?: string; ok?: string; q?: string; quien?: string; cuenta?: string; cat?: string; tipo?: string; desde?: string; hasta?: string; n?: string; nuevo?: string };
 
 /** Lista de movimientos del hogar con búsqueda y filtros. El formulario para cargar uno vive en /movimientos/nuevo. */
 export default async function Movimientos({ searchParams: sp }: { searchParams: Search }) {
@@ -134,9 +134,9 @@ export default async function Movimientos({ searchParams: sp }: { searchParams: 
       {txs.length === 0 ? (
         <Empty>{active > 0 ? "No hay movimientos con esos filtros." : <>Todavía no hay movimientos. <Link href="/movimientos/nuevo" className="font-semibold text-primary">Registrá el primero</Link></>}</Empty>
       ) : (
-        <ul className="card divide-y divide-line py-1">
+        <ul className="stagger card divide-y divide-line py-1">
           {txs.map((t) => (
-            <li key={t.id}>
+            <li key={t.id} className={t.id === sp.nuevo ? "row-new" : undefined}>
               <MovementRow t={t} when={relDay(t.date, todayIso)} action={t.memberId === m.id ? (
                 <form action={voidTx}><input type="hidden" name="id" value={t.id} /><SubmitButton className="text-[11px] font-medium text-muted hover:text-neg" pendingText="...">Anular</SubmitButton></form>
               ) : undefined} />

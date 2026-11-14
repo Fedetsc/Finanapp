@@ -26,11 +26,11 @@ body { @apply bg-bg text-text antialiased; }
   .card { @apply rounded-[20px] bg-surface p-5 shadow-soft; }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-soft transition
-      hover:bg-primary/90 active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-60
+      hover:bg-primary/90 active:scale-[.97] active:brightness-95 duration-150 disabled:cursor-not-allowed disabled:opacity-60
       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-surface px-5 py-3 text-sm font-semibold text-primary shadow-soft transition hover:bg-bg
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-surface px-5 py-3 text-sm font-semibold text-primary shadow-soft transition duration-150 hover:bg-bg active:scale-[.97]
       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
   }
   .input {
@@ -38,7 +38,7 @@ body { @apply bg-bg text-text antialiased; }
       focus:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10;
   }
   .chip { @apply inline-flex items-center gap-1 rounded-full bg-bg px-2.5 py-0.5 text-[11px] font-medium text-muted; }
-  .pill { @apply inline-flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium text-text shadow-soft transition hover:bg-white/70; }
+  .pill { @apply inline-flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium text-text shadow-soft transition duration-150 hover:bg-white/70 active:scale-[.97]; }
   .pill-on { @apply bg-primary text-white hover:bg-primary; }
   .label { @apply mb-1.5 block text-xs font-medium text-muted; }
   .section-title { @apply text-lg font-bold tracking-tight; }
@@ -48,3 +48,45 @@ body { @apply bg-bg text-text antialiased; }
 .amt-m { display: none; }
 [data-hide-amounts] .amt-v { display: none; }
 [data-hide-amounts] .amt-m { display: inline; }
+
+/* ── Animaciones (solo CSS, sin librerías). Solo opacity/transform: no mueven el layout. ── */
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } to { transform: none; } }
+/* Sin opacity en "to": termina en la opacidad propia del elemento (ej. cards pausadas al 70%). */
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { transform: none; } }
+@keyframes modal-in { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: none; } }
+@keyframes modal-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes nav-pop { 0% { transform: scale(1); } 45% { transform: scale(1.18) translateY(-2px); } 100% { transform: none; } }
+
+/* Cambio de página (src/app/(app)/template.tsx se vuelve a montar en cada navegación). */
+.page-enter { animation: page-in 220ms cubic-bezier(.2, .7, .2, 1) both; }
+
+/* Listas: cada item entra 30ms después del anterior (tope 300ms para listas largas). */
+.stagger > * { animation: rise 200ms ease-out both; animation-delay: 300ms; }
+.stagger > :nth-child(1) { animation-delay: 0ms; }
+.stagger > :nth-child(2) { animation-delay: 30ms; }
+.stagger > :nth-child(3) { animation-delay: 60ms; }
+.stagger > :nth-child(4) { animation-delay: 90ms; }
+.stagger > :nth-child(5) { animation-delay: 120ms; }
+.stagger > :nth-child(6) { animation-delay: 150ms; }
+.stagger > :nth-child(7) { animation-delay: 180ms; }
+.stagger > :nth-child(8) { animation-delay: 210ms; }
+.stagger > :nth-child(9) { animation-delay: 240ms; }
+.stagger > :nth-child(10) { animation-delay: 270ms; }
+
+/* Movimiento recién guardado: entra con fade y queda marcado en menta. */
+.row-new { animation: rise 300ms ease-out both; background: rgb(var(--mint-soft)); border-radius: 14px; margin: 0 -8px; padding: 0 8px; }
+
+/* Modales (<dialog>): entran con fade + scale; al cerrar, .closing hace el fade de salida antes de close(). */
+dialog[open] { animation: modal-in 200ms cubic-bezier(.2, .7, .2, 1); }
+dialog[open]::backdrop { animation: fade-in 200ms ease-out; }
+dialog.closing { animation: modal-out 150ms ease-in forwards; }
+dialog.closing::backdrop { animation: modal-out 150ms ease-in forwards; }
+
+/* Bottom nav: el ícono del tab activo hace un pequeño rebote al activarse. */
+.nav-pop { animation: nav-pop 260ms ease-out; }
+
+/* "Reducir movimiento" del sistema: sin animaciones ni transiciones. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after, ::backdrop { animation: none !important; transition: none !important; }
+}

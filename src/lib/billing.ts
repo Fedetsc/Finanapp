@@ -1,6 +1,5 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
-import { nextCycle } from "./dates";
 import { parseDate, todayAR } from "./util";
 
 type Tx = Prisma.TransactionClient;
@@ -12,42 +11,7 @@ export async function systemCategory(tx: Tx, householdId: string, name: string) 
   return c.id;
 }
 
-/**
- * Cobra las suscripciones activas del hogar con nextPaymentDate <= hoy.
- * Crea un EXPENSE por cada período vencido (si se atrasaron varios, uno por período),
- * a nombre del dueño de la suscripción y en su cuenta adherida.
- * Idempotente: el único (subscriptionId, date) en Transaction impide cobrar dos veces la misma fecha,
- * y el update condicionado a la nextPaymentDate leída evita carreras entre dos pestañas.
- */
-export async function processDueSubscriptions(householdId: string): Promise<number> {
-  const t = today();
-  const due = await db.subscription.findMany({ where: { householdId, isActive: true, nextPaymentDate: { lte: t } } });
-  let charged = 0;
-  for (const s of due) {
-    const anchor = s.nextPaymentDate.getUTCDate();
-    let date = s.nextPaymentDate;
-    for (let i = 0; date <= t && i < 120; i++) {
-      const next = nextCycle(date, s.cycle, anchor);
-      try {
-        await db.$transaction(async (tx) => {
-          const moved = await tx.subscription.updateMany({ where: { id: s.id, isActive: true, nextPaymentDate: date }, data: { nextPaymentDate: next, lastChargedDate: date } });
-          if (moved.count !== 1) throw new Error("ya procesada");
-          const categoryId = await systemCategory(tx, householdId, "Suscripciones");
-          const created = await tx.transaction.create({
-            data: { householdId, memberId: s.memberId, accountId: s.accountId, categoryId, subscriptionId: s.id, type: "EXPENSE", amount: s.amount, date, description: `Suscripción: ${s.name}` },
-          });
-          const owner = await tx.member.findUniqueOrThrow({ where: { id: s.memberId }, select: { userId: true } });
-          await tx.auditLog.create({ data: { householdId, userId: owner.userId, action: "CHARGE", entity: "Subscription", entityId: created.id } });
-        });
-        charged++;
-      } catch {
-        break; // otro proceso ya la cobró o la pausaron: dejamos esta suscripción
-      }
-      date = next;
-    }
-  }
-  return charged;
-}
+// Las suscripciones ya no se cobran solas: el cobro es manual desde /suscripciones ("Cobrar ahora").
 
 /** Pasa a AWAITING_CONFIRMATION las cuotas pendientes cuyo resumen ya cerró (hoy > fecha de cierre). */
 export async function refreshInstallments(householdId: string) {

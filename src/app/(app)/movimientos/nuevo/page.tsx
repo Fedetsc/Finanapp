@@ -20,6 +20,7 @@ const Form = z.discriminatedUnion("type", [
 async function add(fd: FormData) {
   "use server";
   const m = await requireMember();
+  let newId = "";
   try {
     const f = Form.parse(Object.fromEntries(fd));
     const amount = toCents(f.amount);
@@ -57,11 +58,12 @@ async function add(fd: FormData) {
 
     await db.$transaction(async (tx) => {
       const t = await tx.transaction.create({ data: { householdId: m.householdId, memberId: m.id, accountId: acc.id, type: f.type, amount, date, description, ...data } });
+      newId = t.id;
       await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "CREATE", entity: f.type === "TRANSFER" ? "Transfer" : "Transaction", entityId: t.id } });
     });
   } catch (e) { fail("/movimientos/nuevo", e); }
   revalidatePath("/", "layout");
-  redirect(`/movimientos?ok=${Date.now()}`);
+  redirect(`/movimientos?ok=${Date.now()}&nuevo=${newId}`); // nuevo: se resalta en la lista
 }
 
 /** Formulario de nuevo movimiento (botón + del menú). Al guardar vuelve a la lista de Movimientos. */

@@ -8,10 +8,12 @@ import { fail } from "@/lib/action";
 import { fdate, fmt, parseDate, toCents } from "@/lib/util";
 import { currencyName, money } from "@/lib/currency";
 import { CYCLES, iso, rollForward } from "@/lib/dates";
-import { processDueSubscriptions, today } from "@/lib/billing";
+import { today } from "@/lib/billing";
+import { changeSubscriptionAmount, chargeSubscription } from "@/lib/subscription-actions";
+import SubscriptionActions from "@/components/SubscriptionActions";
 import Err from "@/components/Err";
 import SubmitButton from "@/components/SubmitButton";
-import { PageHeader } from "@/components/ui";
+import { Notice, PageHeader } from "@/components/ui";
 import Amt, { MASK } from "@/components/Amt";
 
 const PATH = "/suscripciones";
@@ -48,8 +50,13 @@ async function save(fd: FormData) {
     // La suscripción se cobra en la moneda de la cuenta adherida.
     const data = { name: f.name, amount, currency: acc.currency, cycle: f.cycle, nextPaymentDate, accountId: acc.id, isActive: f.isActive === "on" };
     if (f.id) {
-      await mine(f.id, m);
+      const prev = await mine(f.id, m);
       await db.subscription.update({ where: { id: f.id }, data });
+      // Si cambió el monto o la cuenta, queda en el historial igual que con "Modificar monto".
+      if (prev.amount !== amount || prev.accountId !== acc.id) {
+        const moved = prev.accountId !== acc.id;
+        await db.subscriptionChange.create({ data: { householdId: m.householdId, subscriptionId: prev.id, memberId: m.id, oldAmount: prev.amount, newAmount: amount, oldAccountId: moved ? prev.accountId : null, newAccountId: moved ? acc.id : null, note: "Editada" } });
+      }
     } else {
       await db.subscription.create({ data: { ...data, householdId: m.householdId, memberId: m.id } });
     }
@@ -81,23 +88,18 @@ async function remove(fd: FormData) {
   revalidatePath("/", "layout");
 }
 
-async function processNow() {
-  "use server";
+export default async function Suscripciones({ searchParams }: { searchParams: { e?: string; ok?: string; ver?: string; editar?: string; cobrada?: string; monto?: string } }) {
   const m = await requireMember();
-  const n = await processDueSubscriptions(m.householdId);
-  revalidatePath("/", "layout");
-  redirect(`${PATH}?cobradas=${n}`);
-}
-
-export default async function Suscripciones({ searchParams }: { searchParams: { e?: string; ok?: string; ver?: string; editar?: string; cobradas?: string } }) {
-  const m = await requireMember();
-  await processDueSubscriptions(m.householdId);
   const where = { householdId: m.householdId };
   const all = searchParams.ver === "todas";
   const [accounts, subs] = await Promise.all([
     db.account.findMany({ where: { ...where, ownerMemberId: m.id }, orderBy: { name: "asc" }, select: { id: true, name: true, currency: true } }),
     db.subscription.findMany({ where: { ...where, ...(all ? {} : { isActive: true }) }, orderBy: [{ isActive: "desc" }, { nextPaymentDate: "asc" }], include: { account: true, member: true } }),
   ]);
+  // Cobros de hoy (también anulados: el mismo día no se puede volver a cobrar).
+  const t = today();
+  const todays = await db.transaction.findMany({ where: { subscriptionId: { in: subs.map((s) => s.id) }, date: t }, select: { subscriptionId: true, voidedAt: true } });
+  const chargedToday = new Map(todays.map((x) => [x.subscriptionId!, x.voidedAt ? ("anulado" as const) : ("cobrado" as const)]));
   const editing = subs.find((s) => s.id === searchParams.editar && s.memberId === m.id) ?? null;
   // Estimado mensual por moneda (no se suman monedas distintas).
   const monthlyBy = new Map<string, bigint>();
@@ -107,12 +109,10 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Suscripciones" />
-        <form action={processNow}><button className="rounded-lg border border-line px-3 py-1.5 text-sm text-muted hover:text-text">Procesar vencimientos</button></form>
-      </div>
+      <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Suscripciones" subtitle="Nada se cobra solo: cobralas con «Cobrar ahora» cuando llegue el débito." />
       <Err e={searchParams.e} />
-      {searchParams.cobradas && <p className="rounded-lg border border-line bg-surface p-3 text-sm">{searchParams.cobradas === "0" ? "No había suscripciones para cobrar." : `Se registraron ${searchParams.cobradas} cobro(s).`}</p>}
+      {searchParams.cobrada && <Notice tone="ok">Cobro registrado: ya está en Movimientos y bajó el saldo de la cuenta.</Notice>}
+      {searchParams.monto && <Notice tone="ok">Monto actualizado para el próximo cobro.</Notice>}
 
       {accounts.length === 0 ? (
         <p className="card text-center text-sm text-muted">Para adherir una suscripción, primero <a href="/cuentas" className="text-primary underline">creá una cuenta tuya</a>.</p>
@@ -123,7 +123,7 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
           <input name="name" required maxLength={60} defaultValue={editing?.name} placeholder="Nombre (ej. Netflix)" aria-label="Nombre" className="input" />
           <input name="amount" required inputMode="decimal" defaultValue={editing ? fmt(editing.amount).slice(1) : undefined} placeholder="Importe (ej. 10.000)" aria-label="Importe" className="input" />
           <select name="cycle" aria-label="Frecuencia" defaultValue={editing?.cycle ?? "MONTHLY"} className="input">{Object.entries(CYCLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-          <label className="text-xs text-muted">Próximo pago
+          <label className="text-xs text-muted">Próximo cobro (sugerido)
             <input name="nextPaymentDate" type="date" required defaultValue={editing ? iso(editing.nextPaymentDate) : undefined} className="input mt-1" />
           </label>
           <label className="text-xs text-muted">Se debita de (tu cuenta)
@@ -148,7 +148,7 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
       {subs.length === 0 ? (
         <p className="card text-center text-sm text-muted">{all ? "Todavía no hay suscripciones." : "No hay suscripciones activas."}</p>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className="stagger grid gap-3 md:grid-cols-2">
           {subs.map((s) => {
             const own = s.memberId === m.id;
             return (
@@ -156,15 +156,20 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-medium">{s.name}</p>
-                    <p className="text-xs text-muted">{CYCLES[s.cycle]} · {s.account.name}{own ? "" : ` · De ${s.member.name}`}</p>
+                    <p className="text-xs text-muted">{CYCLES[s.cycle]} · {s.account.name} · {s.member.name}{own ? " (yo)" : ""}</p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${s.isActive ? "bg-pos/10 text-pos" : "bg-line text-muted"}`}>{s.isActive ? "Activa" : "Pausada"}</span>
                 </div>
                 <p className="text-xl font-semibold"><Amt c={s.account.currency}>{money(s.amount, s.account.currency)}</Amt></p>
                 <dl className="grid grid-cols-2 gap-1 text-xs">
-                  <div><dt className="text-muted">Próximo pago</dt><dd>{s.isActive ? fdate(s.nextPaymentDate) : "—"}</dd></div>
+                  <div><dt className="text-muted">Próximo cobro sugerido</dt><dd>{s.isActive ? <>{fdate(s.nextPaymentDate)}{s.nextPaymentDate <= t && !chargedToday.has(s.id) && <span className="ml-1 font-semibold text-warn">· para cobrar</span>}</> : "—"}</dd></div>
                   <div><dt className="text-muted">Último cobro</dt><dd>{s.lastChargedDate ? fdate(s.lastChargedDate) : "Todavía no"}</dd></div>
                 </dl>
+                {own && s.isActive && (
+                  <SubscriptionActions sub={{ id: s.id, name: s.name, amount: fmt(s.amount).slice(1), currency: s.currency, accountId: s.accountId, owner: s.member.name }}
+                    accounts={accounts} chargedToday={chargedToday.get(s.id) ?? "no"} back={PATH} changeAction={changeSubscriptionAmount} chargeAction={chargeSubscription} />
+                )}
+                <Link href={`${PATH}/${s.id}`} className="block text-sm font-semibold text-primary">Ver historial</Link>
                 {own && (
                   <div className="flex items-center gap-3 border-t border-line pt-2 text-xs">
                     <Link href={`${PATH}?editar=${s.id}${all ? "&ver=todas" : ""}`} className="text-primary">Editar</Link>

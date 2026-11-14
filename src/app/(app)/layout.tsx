@@ -3,6 +3,7 @@ import { listMemberships, requireMember, roleLabel } from "@/lib/session";
 import { logout } from "@/lib/household-actions";
 import NavLink from "@/components/NavLink";
 import BottomNav from "@/components/BottomNav";
+import InstallPrompt from "@/components/InstallPrompt";
 import HouseholdSwitcher from "@/components/HouseholdSwitcher";
 import { Avatar, Icon } from "@/components/ui";
 
@@ -47,6 +48,7 @@ export default async function Shell({ children }: { children: React.ReactNode })
       </aside>
 
       <main className="mx-auto max-w-2xl px-4 pb-32 pt-6 md:px-8 md:pb-12 md:pt-10">{children}</main>
+      <InstallPrompt />
       <BottomNav />
     </div>
   );

@@ -26,6 +26,7 @@ const P: Record<string, React.ReactNode> = {
   trend: <><path d="m3 17 6-6 4 4 8-8" /><path d="M15 7h6v6" /></>,
   plus: <path d="M12 5v14M5 12h14" />,
   x: <path d="M6 6l12 12M18 6 6 18" />,
+  pencil: <><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   down: <path d="M12 5v14m-6-6 6 6 6-6" />,

@@ -49,21 +49,22 @@ enum InstallmentStatus {
 }
 
 model Household {
-  id            String               @id @default(uuid())
-  name          String
-  currency      String               @default("ARS")
-  inviteCode    String               @unique @default(uuid())
-  createdAt     DateTime             @default(now())
-  members       Member[]
-  accounts      Account[]
-  categories    Category[]
-  transactions  Transaction[]
-  subscriptions Subscription[]
-  creditCards   CreditCard[]
-  cardPurchases CreditCardPurchase[]
-  savingsVaults SavingsVault[]
-  savingsMoves  SavingsMovement[]
-  exchangeRates ExchangeRate[]
+  id                  String               @id @default(uuid())
+  name                String
+  currency            String               @default("ARS")
+  inviteCode          String               @unique @default(uuid())
+  createdAt           DateTime             @default(now())
+  members             Member[]
+  accounts            Account[]
+  categories          Category[]
+  transactions        Transaction[]
+  subscriptions       Subscription[]
+  creditCards         CreditCard[]
+  cardPurchases       CreditCardPurchase[]
+  savingsVaults       SavingsVault[]
+  savingsMoves        SavingsMovement[]
+  exchangeRates       ExchangeRate[]
+  subscriptionChanges SubscriptionChange[]
 }
 
 model Member {
@@ -174,26 +175,46 @@ model Transaction {
 
 /// Montos en centavos, como Account y Transaction.
 model Subscription {
-  id              String            @id @default(uuid())
+  id              String               @id @default(uuid())
   householdId     String
   /// Quien la creó y dueño de la cuenta adherida.
   memberId        String
   name            String
   amount          BigInt
-  currency        String            @default("ARS")
+  currency        String               @default("ARS")
   cycle           SubscriptionCycle
-  nextPaymentDate DateTime          @db.Date
+  nextPaymentDate DateTime             @db.Date
   accountId       String
-  isActive        Boolean           @default(true)
-  lastChargedDate DateTime?         @db.Date
-  createdAt       DateTime          @default(now())
-  household       Household         @relation(fields: [householdId], references: [id])
-  member          Member            @relation(fields: [memberId], references: [id])
-  account         Account           @relation(fields: [accountId], references: [id])
+  isActive        Boolean              @default(true)
+  lastChargedDate DateTime?            @db.Date
+  createdAt       DateTime             @default(now())
+  household       Household            @relation(fields: [householdId], references: [id])
+  member          Member               @relation(fields: [memberId], references: [id])
+  account         Account              @relation(fields: [accountId], references: [id])
   charges         Transaction[]
+  changes         SubscriptionChange[]
 
   @@index([householdId, isActive, nextPaymentDate])
   @@index([accountId])
+}
+
+/// Historial de cambios de monto (y de cuenta) de una suscripción. No crea movimientos.
+model SubscriptionChange {
+  id             String       @id @default(uuid())
+  householdId    String
+  subscriptionId String
+  memberId       String
+  oldAmount      BigInt
+  newAmount      BigInt
+  oldAccountId   String?
+  newAccountId   String?
+  note           String       @default("")
+  createdAt      DateTime     @default(now())
+  household      Household    @relation(fields: [householdId], references: [id])
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, createdAt])
+  @@index([householdId])
 }
 
 model CreditCard {
