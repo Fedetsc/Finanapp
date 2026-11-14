@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
 import Err from "@/components/Err";
+import SubmitButton from "@/components/SubmitButton";
 import { PageHeader } from "@/components/ui";
 
 async function add(fd: FormData) {
@@ -35,8 +36,8 @@ export default async function Categorias({ searchParams }: { searchParams: { e?:
       <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Categorías" />
       <Err e={searchParams.e} />
       <form key={searchParams.ok} action={add} className="card flex gap-3">
-        <input name="name" required maxLength={40} placeholder="Nueva categoría" className="input" />
-        <button className="btn shrink-0">Agregar</button>
+        <input name="name" required maxLength={40} placeholder="Nueva categoría" aria-label="Nueva categoría" className="input" />
+        <SubmitButton className="btn shrink-0">Agregar</SubmitButton>
       </form>
       <ul className="card divide-y divide-line py-1">
         {cats.map((c) => (

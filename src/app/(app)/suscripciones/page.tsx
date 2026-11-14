@@ -9,6 +9,7 @@ import { fdate, fmt, parseDate, toCents } from "@/lib/util";
 import { CYCLES, iso, rollForward } from "@/lib/dates";
 import { processDueSubscriptions, today } from "@/lib/billing";
 import Err from "@/components/Err";
+import SubmitButton from "@/components/SubmitButton";
 import { PageHeader } from "@/components/ui";
 
 const PATH = "/suscripciones";
@@ -113,9 +114,9 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
         <form key={(editing?.id ?? "") + (searchParams.ok ?? "")} action={save} className="card grid gap-3 md:grid-cols-3">
           <h2 className="text-sm font-medium md:col-span-3">{editing ? `Editar ${editing.name}` : "Nueva suscripción"}</h2>
           {editing && <input type="hidden" name="id" value={editing.id} />}
-          <input name="name" required maxLength={60} defaultValue={editing?.name} placeholder="Nombre (ej. Netflix)" className="input" />
-          <input name="amount" required inputMode="decimal" defaultValue={editing ? fmt(editing.amount).slice(1) : undefined} placeholder="Importe (ej. 10.000)" className="input" />
-          <select name="cycle" defaultValue={editing?.cycle ?? "MONTHLY"} className="input">{Object.entries(CYCLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+          <input name="name" required maxLength={60} defaultValue={editing?.name} placeholder="Nombre (ej. Netflix)" aria-label="Nombre" className="input" />
+          <input name="amount" required inputMode="decimal" defaultValue={editing ? fmt(editing.amount).slice(1) : undefined} placeholder="Importe (ej. 10.000)" aria-label="Importe" className="input" />
+          <select name="cycle" aria-label="Frecuencia" defaultValue={editing?.cycle ?? "MONTHLY"} className="input">{Object.entries(CYCLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           <label className="text-xs text-muted">Próximo pago
             <input name="nextPaymentDate" type="date" required defaultValue={editing ? iso(editing.nextPaymentDate) : undefined} className="input mt-1" />
           </label>
@@ -124,7 +125,7 @@ export default async function Suscripciones({ searchParams }: { searchParams: { 
           </label>
           <label className="flex items-center gap-2 self-end pb-2.5 text-sm"><input type="checkbox" name="isActive" defaultChecked={editing ? editing.isActive : true} className="h-4 w-4 accent-[rgb(var(--primary))]" />Activa</label>
           <div className="flex gap-2 md:col-span-3">
-            <button className="btn flex-1">{editing ? "Guardar cambios" : "Agregar suscripción"}</button>
+            <SubmitButton className="btn flex-1" pendingText="Guardando...">{editing ? "Guardar cambios" : "Agregar suscripción"}</SubmitButton>
             {editing && <Link href={PATH} className="rounded-lg border border-line px-4 py-2.5 text-sm text-muted">Cancelar</Link>}
           </div>
         </form>

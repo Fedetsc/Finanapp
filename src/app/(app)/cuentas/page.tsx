@@ -7,6 +7,7 @@ import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
 import { ACCOUNT_TYPES, fmt, toCents } from "@/lib/util";
 import Err from "@/components/Err";
+import SubmitButton from "@/components/SubmitButton";
 import { IconTile, PageHeader } from "@/components/ui";
 import { ACCOUNT_VISUAL } from "@/lib/visuals";
 import { accountBalances } from "@/lib/balances";
@@ -47,10 +48,10 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
       <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Cuentas" subtitle={m.household.name} />
       <Err e={searchParams.e} />
       <form key={searchParams.ok} action={add} className="card grid gap-3 md:grid-cols-4">
-        <input name="name" required placeholder="Nombre (ej. Mercado Pago)" className="input md:col-span-2" />
-        <select name="type" className="input">{Object.entries(ACCOUNT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-        <input name="opening" inputMode="decimal" placeholder="Saldo inicial (opcional)" className="input" />
-        <button className="btn md:col-span-4">Agregar cuenta</button>
+        <input name="name" required maxLength={50} placeholder="Nombre (ej. Mercado Pago)" aria-label="Nombre" className="input md:col-span-2" />
+        <select name="type" aria-label="Tipo de cuenta" className="input">{Object.entries(ACCOUNT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        <input name="opening" inputMode="decimal" placeholder="Saldo inicial (opcional)" aria-label="Saldo inicial" className="input" />
+        <SubmitButton className="btn md:col-span-4" pendingText="Guardando...">Agregar cuenta</SubmitButton>
       </form>
       <nav aria-label="Filtrar cuentas" className="flex flex-wrap gap-2">
         {filters.map(([k, l]) => (

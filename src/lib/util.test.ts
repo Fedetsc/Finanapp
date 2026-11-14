@@ -21,6 +21,8 @@ describe("dinero", () => {
   it("rechaza importes inválidos", () => {
     expect(() => toCents("abc")).toThrow();
     expect(() => toCents("-5")).toThrow();
+    expect(() => toCents("99999999999999999999")).toThrow(); // desbordaría el BIGINT
+    expect(toCents("9.999.999.999.999")).toBe(999999999999900n);
   });
   it("formatea sin errores de precisión", () => {
     expect(fmt(125000000n)).toBe("$1.250.000,00");

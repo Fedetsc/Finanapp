@@ -10,6 +10,7 @@ import { dayOf, installmentSchedule, splitAmount } from "@/lib/dates";
 import { payInstallments, refreshInstallments, today } from "@/lib/billing";
 import { pendingByCard, STATUS_CLS, STATUS_LABEL } from "@/lib/cards";
 import Err from "@/components/Err";
+import SubmitButton from "@/components/SubmitButton";
 import { Notice, PageHeader } from "@/components/ui";
 import AdvancePay from "@/components/AdvancePay";
 
@@ -158,7 +159,7 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
                       <label className="flex-1 text-xs text-muted">¿Con qué cuenta abonaste esta cuota?
                         <select name="accountId" required className="input mt-1">{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
                       </label>
-                      <button className="btn">Confirmar {fmt(i.amount)}</button>
+                      <SubmitButton className="btn" pendingText="Registrando...">Confirmar {fmt(i.amount)}</SubmitButton>
                     </form>
                   </details>
                 )}
@@ -172,12 +173,12 @@ export default async function Tarjeta({ params, searchParams }: { params: { id: 
         <form id="gasto" key={searchParams.ok} action={addPurchase} className="card grid gap-3 md:grid-cols-2">
           <h2 className="text-sm font-medium md:col-span-2">Agregar gasto en cuotas</h2>
           <input type="hidden" name="cardId" value={card.id} />
-          <input name="description" required maxLength={80} placeholder="Descripción (ej. Heladera)" className="input md:col-span-2" />
-          <input name="total" required inputMode="decimal" placeholder="Monto total (ej. 120.000)" className="input" />
-          <select name="installments" defaultValue="1" className="input">{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} {i ? "cuotas" : "cuota"}</option>)}</select>
+          <input name="description" required maxLength={80} placeholder="Descripción (ej. Heladera)" aria-label="Descripción" className="input md:col-span-2" />
+          <input name="total" required inputMode="decimal" placeholder="Monto total (ej. 120.000)" aria-label="Monto total" className="input" />
+          <select name="installments" aria-label="Cantidad de cuotas" defaultValue="1" className="input">{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} {i ? "cuotas" : "cuota"}</option>)}</select>
           <label className="text-xs text-muted md:col-span-2">Fecha de compra<input name="purchaseDate" type="date" required defaultValue={todayAR()} className="input mt-1" /></label>
           <p className="text-xs text-muted md:col-span-2">No cuenta como gasto ahora: cada cuota se registra como gasto cuando la confirmás o la adelantás.</p>
-          <button className="btn md:col-span-2">Agregar gasto</button>
+          <SubmitButton className="btn md:col-span-2" pendingText="Guardando...">Agregar gasto</SubmitButton>
         </form>
       )}
 

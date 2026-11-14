@@ -145,6 +145,9 @@ model Transaction {
   @@unique([subscriptionId, date])
   @@index([householdId, date])
   @@index([toAccountId])
+  @@index([accountId])
+  @@index([memberId])
+  @@index([categoryId])
 }
 
 /// Montos en centavos, como Account y Transaction.
@@ -168,6 +171,7 @@ model Subscription {
   charges         Transaction[]
 
   @@index([householdId, isActive, nextPaymentDate])
+  @@index([accountId])
 }
 
 model CreditCard {
@@ -208,6 +212,7 @@ model CreditCardPurchase {
 
   @@index([cardId])
   @@index([householdId])
+  @@index([memberId])
 }
 
 model Installment {
@@ -279,4 +284,5 @@ model SavingsMovement {
 
   @@index([vaultId, date])
   @@index([accountId])
+  @@index([householdId])
 }

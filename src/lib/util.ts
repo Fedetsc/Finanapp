@@ -12,6 +12,8 @@ export function toCents(input: string): bigint {
   else if (/^(\d+|\d{1,3}(\.\d{3})+)(,\d{1,2})?$/.test(s)) n = s.replace(/\./g, "").replace(",", ".");
   else throw new Error("Importe inválido. Ejemplo: 1.250,50");
   const [i, d = ""] = n.split(".");
+  // Tope razonable (< 10 billones de pesos): evita desbordar el BIGINT de la base con números gigantes.
+  if (i.replace(/^0+/, "").length > 13) throw new Error("El importe es demasiado grande");
   return BigInt(i) * 100n + BigInt(d.padEnd(2, "0"));
 }
 export function fmt(cents: bigint): string {

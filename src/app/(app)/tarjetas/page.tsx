@@ -9,6 +9,7 @@ import { fmt, toCents } from "@/lib/util";
 import { refreshInstallments } from "@/lib/billing";
 import { pendingByCard } from "@/lib/cards";
 import Err from "@/components/Err";
+import SubmitButton from "@/components/SubmitButton";
 import { PageHeader } from "@/components/ui";
 
 const day = z.coerce.number().int().min(1, "El día tiene que estar entre 1 y 31").max(31, "El día tiene que estar entre 1 y 31");
@@ -49,13 +50,13 @@ export default async function Tarjetas({ searchParams }: { searchParams: { e?: s
       <Err e={searchParams.e} />
       <form key={searchParams.ok} action={add} className="card grid gap-3 md:grid-cols-3">
         <h2 className="text-sm font-medium md:col-span-3">Nueva tarjeta</h2>
-        <input name="name" required maxLength={60} placeholder="Nombre (ej. Visa Galicia)" className="input" />
-        <input name="bank" required maxLength={60} placeholder="Banco" className="input" />
-        <input name="last4" inputMode="numeric" pattern="\d{4}" maxLength={4} placeholder="Últimos 4 (opcional)" className="input" />
-        <input name="limit" required inputMode="decimal" placeholder="Límite (ej. 500.000)" className="input" />
+        <input name="name" required maxLength={60} placeholder="Nombre (ej. Visa Galicia)" aria-label="Nombre" className="input" />
+        <input name="bank" required maxLength={60} placeholder="Banco" aria-label="Banco" className="input" />
+        <input name="last4" inputMode="numeric" pattern="\d{4}" maxLength={4} placeholder="Últimos 4 (opcional)" aria-label="Últimos 4" className="input" />
+        <input name="limit" required inputMode="decimal" placeholder="Límite (ej. 500.000)" aria-label="Límite" className="input" />
         <label className="text-xs text-muted">Día de cierre<input name="closingDay" type="number" min={1} max={31} required className="input mt-1" /></label>
         <label className="text-xs text-muted">Día de vencimiento<input name="dueDay" type="number" min={1} max={31} required className="input mt-1" /></label>
-        <button className="btn md:col-span-3">Agregar tarjeta</button>
+        <SubmitButton className="btn md:col-span-3" pendingText="Guardando...">Agregar tarjeta</SubmitButton>
       </form>
 
       {cards.length === 0 ? (

@@ -62,8 +62,9 @@ async function voidTx(fd: FormData) {
   const m = await requireMember();
   const id = String(fd.get("id"));
   await db.$transaction(async (tx) => {
-    const r = await tx.transaction.updateMany({ where: { id, householdId: m.householdId, voidedAt: null }, data: { voidedAt: new Date() } });
-    // Solo auditar si realmente se anuló un movimiento de este hogar.
+    // Solo quien registró el movimiento puede anularlo (no se anulan movimientos de otro miembro).
+    const r = await tx.transaction.updateMany({ where: { id, householdId: m.householdId, memberId: m.id, voidedAt: null }, data: { voidedAt: new Date() } });
+    // Solo auditar si realmente se anuló un movimiento propio de este hogar.
     if (r.count !== 1) return;
     await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "VOID", entity: "Transaction", entityId: id } });
     // Si era el pago de una cuota de tarjeta, la cuota vuelve a quedar impaga.
@@ -139,7 +140,7 @@ export default async function Movimientos({ searchParams }: { searchParams: { e?
             <ul className="card divide-y divide-line py-1">
               {g.items.map((t) => (
                 <li key={t.id}>
-                  <MovementRow t={t} chips action={!t.voidedAt ? (
+                  <MovementRow t={t} chips action={!t.voidedAt && t.memberId === m.id ? (
                     <form action={voidTx}><input type="hidden" name="id" value={t.id} /><button className="text-[11px] font-medium text-muted hover:text-neg">Anular</button></form>
                   ) : undefined} />
                 </li>

@@ -7,6 +7,7 @@ import { fail } from "@/lib/action";
 import { listMemberships, requireUser, roleLabel, setHouseholdCookie } from "@/lib/session";
 import Err from "@/components/Err";
 import AuthShell from "@/components/AuthShell";
+import SubmitButton from "@/components/SubmitButton";
 import { Icon, IconTile } from "@/components/ui";
 
 const CATEGORIES = ["Vivienda", "Alimentación", "Supermercado", "Servicios", "Transporte", "Combustible", "Salud", "Entretenimiento", "Compras", "Educación", "Mascotas", "Finanzas", "Impuestos", "Ahorros", "Sueldo", "Otros"];
@@ -89,14 +90,14 @@ export default async function Onboarding({ searchParams }: { searchParams: { e?:
           <form action={create} className="space-y-3">
             <input name="name" required maxLength={60} placeholder="Nombre del hogar" aria-label="Nombre del hogar" className="input bg-bg" />
             <input name="me" required maxLength={40} defaultValue={suggested} placeholder="Tu nombre en este hogar" aria-label="Tu nombre en este hogar" className="input bg-bg" />
-            <button className="btn w-full py-4 text-base">Crear</button>
+            <SubmitButton className="btn w-full py-4 text-base" pendingText="Creando...">Crear</SubmitButton>
           </form>
         </Option>
         <Option icon="key" tone="green" title="Unirme con un código" hint="Ya tienen un hogar creado">
           <form action={join} className="space-y-3">
             <input name="code" required placeholder="Código de invitación" aria-label="Código de invitación" autoComplete="off" className="input bg-bg text-center font-mono" />
             <input name="me" required maxLength={40} defaultValue={suggested} placeholder="Tu nombre en este hogar" aria-label="Tu nombre en este hogar" className="input bg-bg" />
-            <button className="btn w-full bg-mint py-4 text-base text-primary hover:bg-mint/90">Unirse</button>
+            <SubmitButton className="btn w-full bg-mint py-4 text-base text-primary hover:bg-mint/90" pendingText="Uniéndote...">Unirse</SubmitButton>
           </form>
         </Option>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { fmt } from "@/lib/util";
+import SubmitButton from "./SubmitButton";
 
 type Item = { id: string; label: string; detail: string; cents: string };
 
@@ -43,9 +44,9 @@ export default function AdvancePay({ action, cardId, items, accounts }: {
           <p className="text-xl font-semibold">{fmt(total)}</p>
         </div>
       </div>
-      <button className="btn w-full" disabled={sel.size === 0}>
+      <SubmitButton className="btn w-full" disabled={sel.size === 0} pendingText="Registrando pago...">
         {sel.size === 0 ? "Elegí las cuotas a adelantar" : `Confirmar pago de ${sel.size} cuota(s) por ${fmt(total)}`}
-      </button>
+      </SubmitButton>
     </form>
   );
 }

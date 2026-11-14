@@ -9,6 +9,7 @@ import { fdate, fmt, toCents } from "@/lib/util";
 import { accountBalances } from "@/lib/balances";
 import { today } from "@/lib/billing";
 import Err from "@/components/Err";
+import SubmitButton from "@/components/SubmitButton";
 import { PageHeader, Notice } from "@/components/ui";
 
 const PATH = "/ahorro";
@@ -179,18 +180,18 @@ export default async function Ahorro({ searchParams }: { searchParams: { e?: str
             <p className="text-xs text-muted">Sale de tu cuenta y queda guardado. No cuenta como gasto.</p>
             <label className="block text-xs text-muted">Desde (tu cuenta)<select name="accountId" required className="input mt-1">{accOpt}</select></label>
             <label className="block text-xs text-muted">Hacia<select name="vaultId" required defaultValue={sel} className="input mt-1">{vaultOpt}</select></label>
-            <input name="amount" required inputMode="decimal" placeholder="Importe (ej. 1.500.000)" className="input" />
-            <input name="description" maxLength={120} placeholder="Descripción (opcional)" className="input" />
-            <button className="btn w-full">Apartar</button>
+            <input name="amount" required inputMode="decimal" placeholder="Importe (ej. 1.500.000)" aria-label="Importe" className="input" />
+            <input name="description" maxLength={120} placeholder="Descripción (opcional)" aria-label="Descripción" className="input" />
+            <SubmitButton className="btn w-full" pendingText="Guardando...">Apartar</SubmitButton>
           </form>
           <form id="retirar" key={`r${searchParams.ok ?? ""}${sel ?? ""}`} action={withdraw} className="card space-y-3">
             <h2 className="text-sm font-medium">Retirar</h2>
             <p className="text-xs text-muted">Vuelve a tu cuenta para usarlo. No cuenta como ingreso.</p>
             <label className="block text-xs text-muted">Desde<select name="vaultId" required defaultValue={sel} className="input mt-1">{vaultOpt}</select></label>
             <label className="block text-xs text-muted">Hacia (tu cuenta)<select name="accountId" required className="input mt-1">{accOpt}</select></label>
-            <input name="amount" required inputMode="decimal" placeholder="Importe (ej. 200.000)" className="input" />
-            <input name="description" maxLength={120} placeholder="Descripción (opcional)" className="input" />
-            <button className="btn w-full">Retirar</button>
+            <input name="amount" required inputMode="decimal" placeholder="Importe (ej. 200.000)" aria-label="Importe" className="input" />
+            <input name="description" maxLength={120} placeholder="Descripción (opcional)" aria-label="Descripción" className="input" />
+            <SubmitButton className="btn w-full" pendingText="Guardando...">Retirar</SubmitButton>
           </form>
         </div>
       )}
@@ -198,9 +199,9 @@ export default async function Ahorro({ searchParams }: { searchParams: { e?: str
       <form key={`n${searchParams.ok ?? ""}`} action={createVault} className="card grid gap-3 md:grid-cols-[5rem_1fr_1fr_auto]">
         <h2 className="text-sm font-medium md:col-span-4">Crear ahorro</h2>
         <input name="emoji" maxLength={4} placeholder="💰" aria-label="Emoji (opcional)" className="input text-center" />
-        <input name="name" required maxLength={40} placeholder="Nombre (ej. Indemnización)" className="input" />
-        <input name="target" inputMode="decimal" placeholder="Meta (opcional)" className="input" />
-        <button className="btn">Crear</button>
+        <input name="name" required maxLength={40} placeholder="Nombre (ej. Indemnización)" aria-label="Nombre" className="input" />
+        <input name="target" inputMode="decimal" placeholder="Meta (opcional)" aria-label="Meta" className="input" />
+        <SubmitButton className="btn" pendingText="Creando...">Crear</SubmitButton>
       </form>
 
       {moves.length > 0 && (

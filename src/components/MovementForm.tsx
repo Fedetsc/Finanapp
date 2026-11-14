@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { categoryVisual } from "@/lib/visuals";
 import { Icon, IconTile } from "./ui";
+import SubmitButton from "./SubmitButton";
 
 type Opt = { id: string; name: string };
 type Kind = "EXPENSE" | "INCOME" | "TRANSFER";
@@ -61,7 +62,7 @@ export default function MovementForm({ action, mine, others, categories, today, 
         <label htmlFor="amount" className="text-sm text-muted">Monto</label>
         <div className="mt-1 flex items-start justify-center gap-1">
           <span className="mt-2 text-2xl font-bold text-muted" aria-hidden="true">$</span>
-          <input id="amount" name="amount" required inputMode="decimal" autoComplete="off" placeholder="0"
+          <input id="amount" name="amount" required inputMode="decimal" autoComplete="off" placeholder="0" aria-label="0"
             className="w-full max-w-[16rem] bg-transparent text-center text-5xl font-extrabold tracking-tight text-text placeholder:text-line focus:outline-none" />
         </div>
         <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-muted shadow-soft">
@@ -111,10 +112,10 @@ export default function MovementForm({ action, mine, others, categories, today, 
 
       <label className="relative block">
         <Icon name="note" className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-        <input name="description" maxLength={120} placeholder={transfer ? "Añadir nota (opcional, por defecto «Transferencia»)" : "Añadir nota (opcional)"} className="input pl-11" />
+        <input name="description" maxLength={120} aria-label="Nota" placeholder={transfer ? "Añadir nota (opcional, por defecto «Transferencia»)" : "Añadir nota (opcional)"} className="input pl-11" />
       </label>
 
-      <button className="btn w-full py-4 text-base"><Icon name="check" className="h-5 w-5" strokeWidth={2.6} />{transfer ? "Guardar transferencia" : "Guardar"}</button>
+      <SubmitButton className="btn w-full py-4 text-base" pendingText="Guardando..."><Icon name="check" className="h-5 w-5" strokeWidth={2.6} />{transfer ? "Guardar transferencia" : "Guardar"}</SubmitButton>
     </form>
   );
 }
