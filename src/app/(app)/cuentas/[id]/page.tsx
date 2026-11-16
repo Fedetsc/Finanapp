@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -16,7 +17,8 @@ import Amt, { MASK } from "@/components/Amt";
 import YieldFields from "@/components/YieldFields";
 import SubmitButton from "@/components/SubmitButton";
 import HideAmountsToggle from "@/components/HideAmounts";
-import { HeroCard, Notice, PageHeader } from "@/components/ui";
+import { HeroCard, Icon, Notice, PageHeader } from "@/components/ui";
+import { isMpAccount } from "@/lib/mp";
 
 const back = (id: string) => `/cuentas/${encodeURIComponent(id)}`;
 
@@ -74,6 +76,14 @@ export default async function Cuenta({ params, searchParams }: { params: { id: s
         <p className="mt-1 text-[34px] font-extrabold leading-none tracking-tight tabular-nums"><Amt c={cur}>{money(balance, cur)}</Amt></p>
         {eq && <p className="mt-1 text-xs text-white/60 tabular-nums"><Amt mask={`≈ $ ${MASK}`}>{eq}</Amt></p>}
       </HeroCard>
+
+      {isMpAccount(acc.name) && (
+        <Link href={`/cuentas/${acc.id}/mercadopago`} className="card flex items-center gap-3">
+          <Icon name="key" className="h-5 w-5 text-primary" />
+          <span className="min-w-0 flex-1"><span className="block font-semibold">Mercado Pago real</span><span className="text-xs text-muted">Vincular y probar qué datos da tu cuenta</span></span>
+          <Icon name="chevronRight" className="h-4 w-4 text-muted" />
+        </Link>
+      )}
 
       <section className="card space-y-3">
         <h2 className="font-bold">Rendimientos</h2>

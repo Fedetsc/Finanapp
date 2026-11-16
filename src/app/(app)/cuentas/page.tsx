@@ -12,7 +12,8 @@ import CurrencyPicker from "@/components/CurrencyPicker";
 import HideAmountsToggle from "@/components/HideAmounts";
 import Err from "@/components/Err";
 import SubmitButton from "@/components/SubmitButton";
-import { IconTile, PageHeader } from "@/components/ui";
+import { Icon, IconTile, PageHeader } from "@/components/ui";
+import { isMpAccount } from "@/lib/mp";
 import { ACCOUNT_VISUAL } from "@/lib/visuals";
 import { accountBalances } from "@/lib/balances";
 import Amt, { MASK } from "@/components/Amt";
@@ -66,7 +67,7 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
   await accrueYields(m.householdId); // rendimientos pendientes (por si el cron no corrió)
   const monthStart = new Date(todayAR().slice(0, 7) + "-01T00:00:00Z");
   const [accs, balances, members, rates, yieldsMonth] = await Promise.all([
-    db.account.findMany({ where, orderBy: { createdAt: "asc" } }),
+    db.account.findMany({ where, orderBy: { createdAt: "asc" }, include: { mpConnection: { select: { id: true } } } }),
     // Incluye transferencias y lo apartado/retirado de ahorro.
     accountBalances(m.householdId),
     db.member.findMany({ where, select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -132,6 +133,11 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
                       ? <>Generó <Amt c={a.currency}>{money(yieldOf.get(a.id) ?? 0n, a.currency)}</Amt> este mes</>
                       : "informativo (el saldo ya lo incluye)"}
                   </p>
+                )}
+                {a.mpConnection ? (
+                  <Link href={`/cuentas/${a.id}/mercadopago`} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-mint-soft px-2.5 py-1 text-xs font-semibold text-pos"><Icon name="check" className="h-3.5 w-3.5" />Vinculada con Mercado Pago</Link>
+                ) : mine && isMpAccount(a.name) && (
+                  <a href={`/api/mp/connect?accountId=${a.id}`} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-bg px-2.5 py-1 text-xs font-semibold text-primary"><Icon name="key" className="h-3.5 w-3.5" />Vincular con Mercado Pago real</a>
                 )}
                 <Link href={`/cuentas/${a.id}`} className="mt-3 block text-sm font-semibold text-primary">Ver detalle</Link>
               </li>
