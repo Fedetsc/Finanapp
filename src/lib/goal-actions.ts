@@ -11,8 +11,8 @@ import { splitEqual, splitPercent } from "./goal-math";
 
 type Tx = Prisma.TransactionClient;
 const Period = z.object({ year: z.coerce.number().int().min(2020).max(2100), month: z.coerce.number().int().min(1).max(12) });
-const back = (p: { year: number; month: number }, q: string) => `/hogar?mes=${p.year}-${String(p.month).padStart(2, "0")}&${q}#objetivo`;
-const backErr = (fd: FormData) => { const r = Period.safeParse(Object.fromEntries(fd)); return r.success ? `/hogar?mes=${r.data.year}-${String(r.data.month).padStart(2, "0")}` : "/hogar"; };
+const back = (p: { year: number; month: number }, q: string) => `/hogar/objetivo?mes=${p.year}-${String(p.month).padStart(2, "0")}&${q}`;
+const backErr = (fd: FormData) => { const r = Period.safeParse(Object.fromEntries(fd)); return r.success ? `/hogar/objetivo?mes=${r.data.year}-${String(r.data.month).padStart(2, "0")}` : "/hogar/objetivo"; };
 const currencyOf = (v: FormDataEntryValue | null) => { const c = String(v ?? "ARS"); if (!/^[A-Z][A-Z_]{1,15}$/.test(c)) throw new Error("Moneda inválida"); return c; };
 const positive = (v: FormDataEntryValue | null, what: string) => {
   const c = toCents(String(v ?? ""));
@@ -97,5 +97,5 @@ export async function deleteGoal(fd: FormData) {
     ]);
   }
   revalidatePath("/", "layout");
-  redirect(g ? back(g, "meta=borrada") : "/hogar#objetivo");
+  redirect(g ? back(g, "meta=borrada") : "/hogar/objetivo");
 }

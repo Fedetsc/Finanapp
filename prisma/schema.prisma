@@ -66,25 +66,27 @@ model Household {
   exchangeRates       ExchangeRate[]
   subscriptionChanges SubscriptionChange[]
   monthlyGoals        MonthlyGoal[]
+  splitGroups         SplitGroup[]
 }
 
 model Member {
-  id            String               @id @default(uuid())
+  id                String               @id @default(uuid())
   /// Un usuario puede ser miembro de varios hogares (uno por hogar).
-  userId        String
-  householdId   String
-  name          String
-  role          String               @default("MEMBER")
-  createdAt     DateTime             @default(now())
-  household     Household            @relation(fields: [householdId], references: [id])
-  transactions  Transaction[]
-  accounts      Account[]
-  subscriptions Subscription[]
-  creditCards   CreditCard[]
-  cardPurchases CreditCardPurchase[]
-  savingsVaults SavingsVault[]
-  savingsMoves  SavingsMovement[]
-  monthlyGoals  MonthlyGoal[]
+  userId            String
+  householdId       String
+  name              String
+  role              String               @default("MEMBER")
+  createdAt         DateTime             @default(now())
+  household         Household            @relation(fields: [householdId], references: [id])
+  transactions      Transaction[]
+  accounts          Account[]
+  subscriptions     Subscription[]
+  creditCards       CreditCard[]
+  cardPurchases     CreditCardPurchase[]
+  savingsVaults     SavingsVault[]
+  savingsMoves      SavingsMovement[]
+  monthlyGoals      MonthlyGoal[]
+  splitParticipants SplitParticipant[]
 
   @@unique([userId, householdId])
   @@index([userId])
@@ -366,4 +368,93 @@ model MonthlyGoal {
 
   @@unique([householdId, year, month, memberId])
   @@index([householdId, year, month])
+}
+
+enum SplitGroupStatus {
+  ACTIVE
+  SETTLED
+}
+
+enum SplitType {
+  EQUAL
+  CUSTOM
+}
+
+/// División de gastos estilo SplitWise (viaje, asado, alquiler con amigos). Es solo una calculadora:
+/// NO crea Transaction ni toca saldos del hogar (salvo que el usuario toque "Pasar a movimientos").
+/// Montos en centavos (BigInt) como el resto de la app. householdId en todas las tablas para RLS.
+model SplitGroup {
+  id                String             @id @default(uuid())
+  householdId       String
+  title             String
+  currency          String             @default("ARS")
+  status            SplitGroupStatus   @default(ACTIVE)
+  createdByMemberId String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @default(now()) @updatedAt
+  household         Household          @relation(fields: [householdId], references: [id])
+  participants      SplitParticipant[]
+  expenses          SplitExpense[]
+  settlements       SplitSettlement[]
+
+  @@index([householdId, createdAt])
+}
+
+/// Persona de una división: un miembro del hogar (memberId) o un nombre libre ("Juan", "Mamá").
+model SplitParticipant {
+  id          String            @id @default(uuid())
+  householdId String
+  groupId     String
+  name        String
+  memberId    String?
+  createdAt   DateTime          @default(now())
+  group       SplitGroup        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member      Member?           @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  paid        SplitExpense[]
+  settlesFrom SplitSettlement[] @relation("SettleFrom")
+  settlesTo   SplitSettlement[] @relation("SettleTo")
+
+  @@unique([groupId, name])
+  @@index([householdId])
+}
+
+/// Gasto de una división. splitDetails = { mode, shares: { participantId: "centavos" }, input? }:
+/// la parte de cada uno queda guardada al cargar el gasto (EQUAL entre los elegidos o CUSTOM por % / monto),
+/// así sumar participantes después no cambia los gastos viejos.
+model SplitExpense {
+  id                  String           @id @default(uuid())
+  householdId         String
+  groupId             String
+  description         String
+  amount              BigInt
+  paidByParticipantId String
+  date                DateTime         @db.Date
+  splitType           SplitType        @default(EQUAL)
+  splitDetails        Json?
+  /// Si se pasó a movimientos del hogar: id del Transaction creado (sin FK, solo para no pasarlo dos veces).
+  movedTransactionId  String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @default(now()) @updatedAt
+  group               SplitGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  paidBy              SplitParticipant @relation(fields: [paidByParticipantId], references: [id], onDelete: NoAction)
+
+  @@index([groupId, date])
+  @@index([householdId])
+}
+
+/// Pago entre participantes ("Karu le pagó $5.000 a Fede"). Saca la deuda de pendientes y queda en el historial.
+model SplitSettlement {
+  id                String           @id @default(uuid())
+  householdId       String
+  groupId           String
+  fromParticipantId String
+  toParticipantId   String
+  amount            BigInt
+  createdAt         DateTime         @default(now())
+  group             SplitGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  from              SplitParticipant @relation("SettleFrom", fields: [fromParticipantId], references: [id], onDelete: NoAction)
+  to                SplitParticipant @relation("SettleTo", fields: [toParticipantId], references: [id], onDelete: NoAction)
+
+  @@index([groupId, createdAt])
+  @@index([householdId])
 }

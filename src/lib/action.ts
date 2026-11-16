@@ -19,5 +19,5 @@ export function fail(path: string, e: unknown): never {
   } else if (e instanceof Error && !(e instanceof ZodError)) {
     msg = e.message;
   }
-  redirect(`${path}?e=${encodeURIComponent(msg)}`);
+  redirect(`${path}${path.includes("?") ? "&" : "?"}e=${encodeURIComponent(msg)}`);
 }

@@ -183,7 +183,7 @@ export default async function Home() {
               )}
             </div>
           ) : (
-            <Link href="/hogar#objetivo" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/20 active:scale-95">
+            <Link href="/hogar/objetivo" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/20 active:scale-95">
               <Icon name="target" className="h-3.5 w-3.5" />Definir objetivo
             </Link>
           )}
