@@ -4,6 +4,9 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 // Antes de pintar: si este dispositivo tenía los montos ocultos, se ocultan sin parpadeo (ver HideAmounts.tsx).
 const HIDE_SCRIPT = `try{if(localStorage.getItem("finanapp_hide_amounts")==="1")document.documentElement.setAttribute("data-hide-amounts","")}catch(e){}`;
 
+// Tema: el guardado en este dispositivo o, si no hay, el del sistema (ver Theme.tsx). Antes de pintar, sin parpadeo.
+const THEME_SCRIPT = `try{var t=localStorage.getItem("finanapp_theme");if(t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}`;
+
 const sans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans" });
 export const metadata = {
   title: "Finanapp",
@@ -22,7 +25,7 @@ export const viewport = { themeColor: "#2D4A63", width: "device-width", initialS
 export default function Root({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={sans.variable} suppressHydrationWarning>
-      <head><script dangerouslySetInnerHTML={{ __html: HIDE_SCRIPT }} /></head>
+      <head><script dangerouslySetInnerHTML={{ __html: HIDE_SCRIPT + THEME_SCRIPT }} /></head>
       <body className="font-sans">{children}</body>
     </html>
   );

@@ -5,9 +5,9 @@ import Amt, { MASK } from "./Amt";
 import { useAmountsHidden } from "./HideAmounts";
 
 const tip = {
-  contentStyle: { background: "#FFFFFF", border: "none", borderRadius: 14, fontSize: 12, boxShadow: "0 6px 20px rgba(16,24,40,.08)" },
-  itemStyle: { color: "#1E2B3A" },
-  labelStyle: { color: "#8A94A3" },
+  contentStyle: { background: "rgb(var(--surface))", border: "1px solid rgb(var(--line))", borderRadius: 14, fontSize: 12, boxShadow: "0 6px 20px rgba(16,24,40,.08)" },
+  itemStyle: { color: "rgb(var(--text))" },
+  labelStyle: { color: "rgb(var(--muted))" },
 };
 const money = (v: unknown) => "$" + Number(v).toLocaleString("es-AR", { maximumFractionDigits: 0 });
 /** Formato del tooltip: respeta el ojito (el tooltip lo dibuja Recharts, no se puede ocultar con CSS). */
@@ -18,9 +18,9 @@ function useMoneyFormatter() {
 
 /** Donut con total al centro y leyenda propia debajo (porcentaje por categoría). */
 export function CategoryDonut({ pie, empty, height = "h-56", centerLabel = "Total gastado" }: { pie: Slice[]; empty: string; height?: string; centerLabel?: string }) {
+  const format = useMoneyFormatter(); // antes del return: los hooks siempre en el mismo orden
   if (!pie.length) return <p className="py-14 text-center text-sm text-muted">{empty}</p>;
   const total = pie.reduce((a, s) => a + s.value, 0);
-  const format = useMoneyFormatter();
   return (
     <div>
       <div className={`relative ${height}`}>
@@ -65,27 +65,11 @@ export function MonthlyBars({ bars }: { bars: { mes: string; Ingresos: number; G
             <CartesianGrid vertical={false} stroke={CHART.grid} />
             <XAxis dataKey="mes" tick={{ fontSize: 12, fill: CHART.axis }} axisLine={false} tickLine={false} />
             <YAxis hide />
-            <Tooltip {...tip} formatter={format} cursor={{ fill: "rgba(45,74,99,.05)" }} />
+            <Tooltip {...tip} formatter={format} cursor={{ fill: "rgb(var(--muted) / .08)" }} />
             <Bar dataKey="Ingresos" fill={CHART.income} radius={[6, 6, 0, 0]} maxBarSize={22} />
             <Bar dataKey="Gastos" fill={CHART.expense} radius={[6, 6, 0, 0]} maxBarSize={22} />
           </BarChart>
         </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-/** Bloque principal del hogar: barras de 6 meses + donut del mes. */
-export default function Charts({ bars, pie }: { bars: { mes: string; Ingresos: number; Gastos: number }[]; pie: Slice[] }) {
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="card">
-        <h3 className="mb-4 font-bold">Ingresos y gastos · 6 meses</h3>
-        <MonthlyBars bars={bars} />
-      </div>
-      <div className="card">
-        <h3 className="mb-4 font-bold">Gastos del mes por categoría</h3>
-        <CategoryDonut pie={pie} empty="Todavía no hay gastos este mes." />
       </div>
     </div>
   );

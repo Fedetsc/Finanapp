@@ -7,7 +7,7 @@ import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
 import { parseDate, toCents, todayAR } from "@/lib/util";
 import { convert, parseRate, rateToDecimal } from "@/lib/currency";
-import { PageHeader } from "@/components/ui";
+import { Icon } from "@/components/ui";
 import Err from "@/components/Err";
 import MovementForm from "@/components/MovementForm";
 
@@ -81,7 +81,11 @@ export default async function NuevoMovimiento({ searchParams }: { searchParams: 
 
   return (
     <div>
-      <PageHeader back={{ href: "/movimientos", label: "Movimientos" }} title="Nuevo movimiento" subtitle={m.household.name} />
+      {/* Encabezado compacto (volver + título en una línea) para que el formulario entre sin scroll. */}
+      <header className="-mt-2 mb-3 flex items-center gap-2">
+        <Link href="/movimientos" aria-label="Volver a Movimientos" className="rounded-full p-1.5 text-muted hover:bg-surface hover:text-text"><Icon name="chevronLeft" className="h-5 w-5" /></Link>
+        <h1 className="text-xl font-extrabold tracking-tight">Nuevo movimiento</h1>
+      </header>
       <Err e={searchParams.e} />
       {mine.length === 0 ? (
         <div className="card text-center text-sm text-muted">Para registrar movimientos, primero <Link href="/cuentas" className="font-semibold text-primary">creá una cuenta tuya</Link>.</div>

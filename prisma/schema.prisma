@@ -65,6 +65,7 @@ model Household {
   savingsMoves        SavingsMovement[]
   exchangeRates       ExchangeRate[]
   subscriptionChanges SubscriptionChange[]
+  monthlyGoals        MonthlyGoal[]
 }
 
 model Member {
@@ -83,6 +84,7 @@ model Member {
   cardPurchases CreditCardPurchase[]
   savingsVaults SavingsVault[]
   savingsMoves  SavingsMovement[]
+  monthlyGoals  MonthlyGoal[]
 
   @@unique([userId, householdId])
   @@index([userId])
@@ -342,4 +344,26 @@ model ExchangeRate {
   household         Household @relation(fields: [householdId], references: [id])
 
   @@unique([householdId, currency])
+}
+
+/// Objetivo (tope) de gastos de un mes. memberId null = meta del hogar completo; con memberId = meta de ese miembro.
+/// Montos en centavos (BigInt), como el resto de la app. Gastado = suma de EXPENSE del mes en esa moneda.
+/// Unicidad: 1 meta por miembro por mes (@@unique) y 1 meta de hogar por mes: índice parcial en la base
+/// MonthlyGoal_household_month_key (UNIQUE householdId, year, month WHERE memberId IS NULL), creado a mano
+/// porque Prisma no modela índices parciales.
+model MonthlyGoal {
+  id          String    @id @default(uuid())
+  householdId String
+  memberId    String?
+  amount      BigInt
+  currency    String    @default("ARS")
+  month       Int
+  year        Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  household   Household @relation(fields: [householdId], references: [id])
+  member      Member?   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, year, month, memberId])
+  @@index([householdId, year, month])
 }

@@ -46,6 +46,8 @@ const P: Record<string, React.ReactNode> = {
   note: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></>,
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
   eyeOff: <><path d="M10.7 5.1A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20" /></>,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+  moon: <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z" />,
   mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3.5 6.5 8.5 6 8.5-6" /></>,
 };
 
@@ -59,11 +61,11 @@ export function Icon({ name, className = "h-5 w-5", strokeWidth = 2 }: { name: s
 
 /* Fondos pastel de los íconos, como en el ejemplo. Hex fijos: son colores de marca, no de tema. */
 export const TONES: Record<Tone, string> = {
-  orange: "bg-[#FFF1E5] text-[#F97316]",
-  green: "bg-[#E6F5EE] text-[#2E8B62]",
-  blue: "bg-[#EAF3FB] text-[#1E88E5]",
-  violet: "bg-[#F1EEFC] text-[#7C5CE0]",
-  pink: "bg-[#FDECEE] text-[#E5484D]",
+  orange: "bg-[#FFF1E5] text-[#F97316] dark:bg-[#F97316]/15 dark:text-[#FDBA74]",
+  green: "bg-[#E6F5EE] text-[#2E8B62] dark:bg-[#2E8B62]/20 dark:text-[#6EE7B7]",
+  blue: "bg-[#EAF3FB] text-[#1E88E5] dark:bg-[#1E88E5]/15 dark:text-[#93C5FD]",
+  violet: "bg-[#F1EEFC] text-[#7C5CE0] dark:bg-[#7C5CE0]/20 dark:text-[#C4B5FD]",
+  pink: "bg-[#FDECEE] text-[#E5484D] dark:bg-[#E5484D]/15 dark:text-[#FCA5A5]",
   navy: "bg-primary text-white",
   gray: "bg-bg text-muted",
 };
@@ -74,7 +76,7 @@ export function IconTile({ icon, tone = "gray", size = "md" }: { icon: string; t
 }
 
 /* ---------- Avatar con inicial ---------- */
-const AV = ["bg-[#E6F5EE] text-[#2E8B62]", "bg-[#EAF3FB] text-[#1E6FB8]", "bg-[#F1EEFC] text-[#6A4FD0]", "bg-[#FFF1E5] text-[#C2570C]", "bg-[#FDECEE] text-[#C23A3F]"];
+const AV = ["bg-[#E6F5EE] text-[#2E8B62] dark:bg-[#2E8B62]/25 dark:text-[#6EE7B7]", "bg-[#EAF3FB] text-[#1E6FB8] dark:bg-[#1E88E5]/20 dark:text-[#93C5FD]", "bg-[#F1EEFC] text-[#6A4FD0] dark:bg-[#7C5CE0]/25 dark:text-[#C4B5FD]", "bg-[#FFF1E5] text-[#C2570C] dark:bg-[#F97316]/20 dark:text-[#FDBA74]", "bg-[#FDECEE] text-[#C23A3F] dark:bg-[#E5484D]/20 dark:text-[#FCA5A5]"];
 const hash = (s: string) => [...s].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
 
 export function Avatar({ name, size = "md", ring = false }: { name: string; size?: "sm" | "md" | "lg"; ring?: boolean }) {
@@ -98,7 +100,7 @@ export function Card({ className = "", children, as: As = "div" }: { className?:
 /** Card principal azul petróleo con el círculo decorativo. */
 export function HeroCard({ className = "", children }: { className?: string; children: React.ReactNode }) {
   return (
-    <div className={`relative overflow-hidden rounded-[24px] bg-primary p-6 text-white shadow-soft ${className}`}>
+    <div className={`relative overflow-hidden rounded-[24px] bg-primary p-6 text-white shadow-soft dark:ring-1 dark:ring-white/10 ${className}`}>
       <span aria-hidden="true" className="pointer-events-none absolute -right-14 -top-14 h-48 w-48 rounded-full bg-primary-2/80" />
       <div className="relative">{children}</div>
     </div>
@@ -136,7 +138,7 @@ export function Input({ label, className = "", ...props }: React.InputHTMLAttrib
 }
 
 export function Notice({ tone = "info", children }: { tone?: "info" | "ok" | "warn"; children: React.ReactNode }) {
-  const cls = tone === "ok" ? "bg-mint-soft text-pos" : tone === "warn" ? "bg-[#FFF4E0] text-[#9A5B00]" : "bg-surface text-text shadow-soft";
+  const cls = tone === "ok" ? "bg-mint-soft text-pos" : tone === "warn" ? "bg-[#FFF4E0] text-[#9A5B00] dark:bg-warn/15 dark:text-[#FCD34D]" : "bg-surface text-text shadow-soft";
   return <p role="status" className={`mb-4 rounded-2xl px-4 py-3 text-sm ${cls}`}>{children}</p>;
 }
 

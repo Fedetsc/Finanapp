@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 const c = (v: string) => `rgb(var(--${v}) / <alpha-value>)`;
 export default {
+  darkMode: "class", // tema oscuro con la clase "dark" en <html> (ver Theme.tsx)
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {

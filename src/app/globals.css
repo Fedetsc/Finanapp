@@ -18,7 +18,31 @@
   --neg: 229 72 77;         /* #E5484D gastos */
   --warn: 217 140 31;       /* #D98C1F avisos */
   --line: 236 238 242;      /* #ECEEF2 separadores */
+  --chart-1: 45 74 99;      /* primer color de los gráficos (azul petróleo) */
+  --chart-6: 201 206 216;   /* gris de los gráficos */
 }
+
+/* Tema oscuro (clase "dark" en <html>, ver src/components/Theme.tsx). La card principal y los botones
+   siguen en azul petróleo (--primary no cambia); cambian fondo, cards, textos y separadores. */
+.dark {
+  color-scheme: dark;
+  --bg: 15 23 42;           /* #0F172A */
+  --surface: 30 41 59;      /* #1E293B */
+  --text: 241 245 249;      /* #F1F5F9 */
+  --muted: 148 163 184;     /* #94A3B8 */
+  --primary-2: 58 95 120;
+  --pos: 52 211 153;        /* #34D399 */
+  --mint-soft: 20 60 50;    /* menta oscuro */
+  --neg: 248 113 113;       /* #F87171 */
+  --warn: 251 191 36;
+  --line: 51 65 85;         /* #334155 */
+  --chart-1: 127 166 198;   /* azul más claro para que se vea sobre fondo oscuro */
+  --chart-6: 100 116 139;
+}
+/* Textos y bordes en azul petróleo: en oscuro se aclaran para que se lean (los fondos bg-primary no cambian). */
+.dark .text-primary:not(.bg-mint), .dark .hover\:text-primary:hover { color: rgb(147 187 222); }
+.dark .border-primary { border-color: rgb(147 187 222); }
+.dark .shadow-soft { --tw-shadow: 0 1px 2px rgba(0,0,0,.3); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
 
 body { @apply bg-bg text-text antialiased; }
 
@@ -34,11 +58,11 @@ body { @apply bg-bg text-text antialiased; }
       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
   }
   .input {
-    @apply w-full rounded-2xl border border-line bg-surface px-4 py-3 text-sm text-text placeholder:text-muted transition
+    @apply w-full rounded-2xl border border-line bg-surface px-4 py-3 text-sm text-text dark:bg-bg placeholder:text-muted transition
       focus:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10;
   }
   .chip { @apply inline-flex items-center gap-1 rounded-full bg-bg px-2.5 py-0.5 text-[11px] font-medium text-muted; }
-  .pill { @apply inline-flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium text-text shadow-soft transition duration-150 hover:bg-white/70 active:scale-[.97]; }
+  .pill { @apply inline-flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium text-text shadow-soft transition duration-150 hover:bg-surface/70 active:scale-[.97]; }
   .pill-on { @apply bg-primary text-white hover:bg-primary; }
   .label { @apply mb-1.5 block text-xs font-medium text-muted; }
   .section-title { @apply text-lg font-bold tracking-tight; }
@@ -82,6 +106,13 @@ dialog[open] { animation: modal-in 200ms cubic-bezier(.2, .7, .2, 1); }
 dialog[open]::backdrop { animation: fade-in 200ms ease-out; }
 dialog.closing { animation: modal-out 150ms ease-in forwards; }
 dialog.closing::backdrop { animation: modal-out 150ms ease-in forwards; }
+
+/* Menú desde abajo (bottom sheet, QuickAdd.tsx): pegado al borde inferior, sube en 250ms y baja al cerrar. */
+@keyframes sheet-in { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes sheet-out { to { transform: translateY(100%); } }
+dialog.sheet { margin: auto auto 0; padding: 0; width: 100%; max-width: 32rem; max-height: 100dvh; overflow: visible; }
+dialog.sheet[open] { animation: sheet-in 250ms cubic-bezier(.2, .8, .2, 1); }
+dialog.sheet.closing { animation: sheet-out 200ms ease-in forwards; }
 
 /* Bottom nav: el ícono del tab activo hace un pequeño rebote al activarse. */
 .nav-pop { animation: nav-pop 260ms ease-out; }

@@ -38,7 +38,7 @@ export default function MovementRow({ t, when, chips = false, action }: { t: Row
         <p className={`truncate text-[15px] font-semibold ${voided ? "text-muted line-through" : ""}`}>{title}</p>
         {chips ? (
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {transfer && <span className="chip bg-[#EAF3FB] text-[#1E6FB8]">Transferencia</span>}
+            {transfer && <span className="chip bg-[#EAF3FB] text-[#1E6FB8] dark:bg-[#1E88E5]/15 dark:text-[#93C5FD]">Transferencia</span>}
             {t.type === "YIELD" && <span className="chip bg-mint-soft text-pos">Rendimiento</span>}
             <span className="chip text-text/70">{t.member.name}</span>
             <span className="chip"><Icon name={transfer ? "transfer" : "bank"} className="h-3 w-3" />{account}</span>
