@@ -11,7 +11,7 @@ import Err from "./Err";
 import SubmitButton from "./SubmitButton";
 
 type Linked = { mpUserId: string; createdAt: Date; expiresAt: Date; mine: boolean; byName: string; liveMode: boolean; balance: bigint | null; balanceCurrency: string | null; lastSyncAt: Date | null; syncError: string | null; baseBalance: bigint | null; baseAt: Date | null };
-const OK: Record<string, string> = { vinculada: "Cuenta vinculada con Mercado Pago.", desvinculada: "Cuenta desvinculada. Vuelve a ser manual.", saldo: "Saldo sincronizado.", base: "Saldo inicial guardado. Desde ahora se suman los pagos de Mercado Pago." };
+const OK: Record<string, string> = { vinculada: "Cuenta vinculada con Mercado Pago.", desvinculada: "Cuenta desvinculada. Vuelve a ser manual.", saldo: "Saldo sincronizado.", base: "Saldo inicial guardado. Desde ahora se suman los pagos de Mercado Pago.", "ajuste-mas": "Saldo corregido. La diferencia quedó como un ingreso \"Ajuste de saldo\" en Movimientos.", "ajuste-menos": "Saldo corregido. La diferencia quedó como un gasto \"Ajuste de saldo\" en Movimientos." };
 
 export default function MpLinkView({ account, linked, canLink, probes, sp }: {
   account: { id: string; name: string; currency: string }; linked: Linked | null; canLink: string | null; probes: Probe[] | null; sp: { e?: string; ok?: string };
@@ -46,7 +46,7 @@ export default function MpLinkView({ account, linked, canLink, probes, sp }: {
           <form id="saldo-inicial" action={setMpBase} className="scroll-mt-6 space-y-2 rounded-2xl border border-line p-3">
             <input type="hidden" name="accountId" value={account.id} />
             <label htmlFor="mp-base" className="block text-sm font-semibold">{linked.baseBalance === null ? "Saldo inicial" : "Corregir saldo"}</label>
-            <p className="text-xs text-muted">Escribí el saldo disponible que ves ahora en la app de Mercado Pago. Desde este momento se le suman y restan los pagos.</p>
+            <p className="text-xs text-muted">Escribí el saldo disponible que ves ahora en la app de Mercado Pago. Desde este momento se le suman y restan los pagos.{linked.baseBalance !== null && " La diferencia con el saldo calculado se guarda como un movimiento \"Ajuste de saldo\", que podés recategorizar."}</p>
             <div className="flex gap-2">
               <input id="mp-base" name="base" required inputMode="decimal" autoComplete="off" placeholder="Ej. 125.000,50" className="input min-w-0 flex-1" />
               <SubmitButton className="btn shrink-0 px-4" pendingText="...">Guardar</SubmitButton>
@@ -60,7 +60,7 @@ export default function MpLinkView({ account, linked, canLink, probes, sp }: {
             <form action={unlinkMp} className="flex-1"><input type="hidden" name="accountId" value={account.id} /><SubmitButton className="btn-ghost w-full justify-center !text-neg" pendingText="Desvinculando...">Desvincular</SubmitButton></form>
           </div>
         )}
-        <p className="text-[11px] text-muted">Mercado Pago no tiene un endpoint oficial de saldo: se calcula con el saldo inicial + los pagos aprobados (cobros suman, pagos restan). Transferencias por CVU/alias, rendimientos y otros movimientos que no son pagos no aparecen ahí: si el saldo se desvía, corregilo arriba. Una cuenta de prueba nunca cambia el saldo real.</p>
+        <p className="text-[11px] text-muted">Mercado Pago no tiene un endpoint oficial de saldo: se calcula con el saldo inicial + los pagos aprobados (cobros suman, pagos restan). Si el saldo se desvía (por ejemplo por transferencias o rendimientos que no vienen como pagos), corregilo arriba y la diferencia queda como ajuste. Una cuenta de prueba nunca cambia el saldo real.</p>
       </div>
 
       {probes && (

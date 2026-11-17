@@ -40,6 +40,9 @@ export async function diagnose(conn: Conn, currency: string): Promise<Probe[]> {
     ["me", "Usuario", "Confirma que el token funciona.", "/users/me", (r) => (String(obj(r.body).id) === me ? "Coincide con el usuario vinculado" : "⚠ No coincide con el usuario vinculado")],
     ["payin", "Pagos que cobraste", "Ingresos: suman al saldo.", `/v1/payments/search?${search}&collector.id=${me}`, paging],
     ["payout", "Pagos que hiciste", "Gastos: restan del saldo.", `/v1/payments/search?${search}&payer.id=${me}`, paging],
+    // Solo diagnóstico (lectura): el reporte de Dinero liberado es de ventas, NO se usa para el saldo de la billetera.
+    ["relcfg", "Reporte de Dinero liberado: configuración", "Solo diagnóstico, no se usa para el saldo. Solo lectura: no crea nada.", "/v1/account/release_report/config", (r) => (r.ok ? "Hay una configuración del reporte" : "")],
+    ["rellist", "Reporte de Dinero liberado: reportes", "Solo diagnóstico, no se usa para el saldo. Solo lectura: no genera reportes.", "/v1/account/release_report/list", (r) => `Reportes existentes: ${Array.isArray(r.body) ? r.body.length : "—"}`],
   ];
   const probes = await Promise.all(calls.map(async ([key, title, why, endpoint, sum]) => {
     const r = await mpGet(conn, endpoint);
