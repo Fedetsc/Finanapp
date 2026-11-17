@@ -59,7 +59,8 @@ async function searchAll(conn: Conn, filter: string, since: Date): Promise<{ res
   return { results };
 }
 
-export type BalanceCalc = { ok: true; balance: bigint; base: bigint; delta: bigint; count: number } | { ok: false; error: string; failed?: MpResult };
+export type Counted = { payment: unknown; delta: bigint };
+export type BalanceCalc = { ok: true; balance: bigint; base: bigint; delta: bigint; count: number; items: Counted[] } | { ok: false; error: string; failed?: MpResult };
 
 /** Calcula el saldo (no guarda nada). */
 export async function computeMpBalance(conn: Conn & { mpUserId: string; baseBalance: bigint | null; baseAt: Date | null }, currency: string): Promise<BalanceCalc> {
@@ -69,31 +70,59 @@ export async function computeMpBalance(conn: Conn & { mpUserId: string; baseBala
   const failed = cobros.error ?? pagos.error;
   if (failed) return { ok: false, error: `Mercado Pago respondió ${failed.status ?? "sin respuesta"} al buscar pagos.`, failed };
   const seen = new Set<string>();
-  let delta = 0n, count = 0;
+  const items: Counted[] = [];
+  let delta = 0n;
   for (const p of [...cobros.results, ...pagos.results]) {
     const id = String(obj(p).id ?? "");
-    if (!id || seen.has(id)) continue;
+    if (!id || seen.has(id)) continue; // el mismo pago puede venir en las dos búsquedas
     seen.add(id);
     const d = paymentDelta(p, me, currency, conn.baseAt);
     if (d === null) continue;
-    delta += d; count++;
+    delta += d;
+    items.push({ payment: p, delta: d });
   }
-  return { ok: true, balance: conn.baseBalance + delta, base: conn.baseBalance, delta, count };
+  return { ok: true, balance: conn.baseBalance + delta, base: conn.baseBalance, delta, count: items.length, items };
 }
 
-/** "Sincronizar": recalcula y guarda el saldo. Nunca lanza: si falla, guarda el motivo en syncError. */
+const name = (v: unknown) => { const o = obj(v); const n = [o.first_name, o.last_name].filter((x) => typeof x === "string" && x.trim()).join(" ").trim(); return n ? n.slice(0, 60) : null; };
+
+/** Datos del pendiente a partir de un pago contado en el saldo. */
+export function pendingFrom(p: unknown, delta: bigint) {
+  const x = obj(p);
+  const op = String(x.operation_type ?? "");
+  const desc = typeof x.description === "string" && x.description.trim() ? x.description.trim().slice(0, 120) : null;
+  return {
+    mpPaymentId: String(x.id),
+    direction: delta > 0n ? ("IN" as const) : ("OUT" as const),
+    // money_transfer: envío de dinero entre cuentas; account_fund: ingreso de dinero a la cuenta.
+    kind: op === "money_transfer" || op === "account_fund" ? "TRANSFER" : "PAYMENT",
+    amount: delta > 0n ? delta : -delta,
+    description: desc,
+    counterpart: delta > 0n ? name(x.payer) ?? name(obj(obj(x.additional_info).payer)) : null,
+    occurredAt: new Date(Date.parse(String(x.date_approved ?? x.date_created))),
+  };
+}
+
+const CONN_SELECT = { id: true, householdId: true, accountId: true, mpUserId: true, accessTokenEnc: true, refreshTokenEnc: true, expiresAt: true, baseBalance: true, baseAt: true, account: { select: { currency: true } } } as const;
+
+/**
+ * Sincroniza una vinculación: recalcula el saldo (saldo inicial + pagos) y crea un pendiente por cada pago nuevo.
+ * Idempotente: el saldo se recalcula entero y los pendientes son únicos por (cuenta, mpPaymentId), así que
+ * sincronizar dos veces (o webhook + cron a la vez) no duplica nada. Nunca lanza: si falla, guarda el motivo.
+ */
 export async function syncMpBalance(connectionId: string): Promise<BalanceCalc | null> {
-  const conn = await db.mpConnection.findUnique({
-    where: { id: connectionId },
-    select: { id: true, mpUserId: true, accessTokenEnc: true, refreshTokenEnc: true, expiresAt: true, baseBalance: true, baseAt: true, account: { select: { currency: true } } },
-  });
+  const conn = await db.mpConnection.findUnique({ where: { id: connectionId }, select: CONN_SELECT });
   if (!conn) return null;
+  await db.mpConnection.update({ where: { id: conn.id }, data: { lastAttemptAt: new Date() } });
+  const currency = conn.account.currency;
   try {
-    const r = await computeMpBalance(conn, conn.account.currency);
-    await db.mpConnection.update({
-      where: { id: conn.id },
-      data: r.ok ? { balance: r.balance, balanceCurrency: conn.account.currency, lastSyncAt: new Date(), syncError: null } : { syncError: r.error },
-    });
+    const r = await computeMpBalance(conn, currency);
+    if (!r.ok) { await db.mpConnection.update({ where: { id: conn.id }, data: { syncError: r.error } }); return r; }
+    const pend = r.items.filter((i) => i.delta !== 0n).map((i) => ({ ...pendingFrom(i.payment, i.delta), householdId: conn.householdId, accountId: conn.accountId, connectionId: conn.id, currency }));
+    await db.$transaction([
+      db.pendingMovement.createMany({ data: pend.filter((x) => !Number.isNaN(x.occurredAt.getTime())), skipDuplicates: true }),
+      db.mpConnection.update({ where: { id: conn.id }, data: { balance: r.balance, balanceCurrency: currency, lastSyncAt: new Date(), syncError: null } }),
+    ]);
     return r;
   } catch (e) {
     // Solo el tipo de error: nunca tokens ni la respuesta.
@@ -102,6 +131,38 @@ export async function syncMpBalance(connectionId: string): Promise<BalanceCalc |
     await db.mpConnection.update({ where: { id: conn.id }, data: { syncError: error } }).catch(() => {});
     return { ok: false, error };
   }
+}
+
+/** Vinculaciones que no se intentaron sincronizar en los últimos `minAgeMs` (null = todas las del filtro). */
+async function stale(where: { householdId?: string; mpUserId?: string }, minAgeMs: number) {
+  const before = new Date(Date.now() - minAgeMs);
+  return db.mpConnection.findMany({
+    where: { ...where, baseBalance: { not: null }, OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: before } }] },
+    select: { id: true }, orderBy: { lastAttemptAt: { sort: "asc", nulls: "first" } }, take: 50,
+  });
+}
+
+/** Al abrir Inicio/Cuentas: sincroniza las vinculaciones del hogar si pasaron más de 2 minutos. */
+export const AUTO_SYNC_MS = 2 * 60 * 1000;
+export async function syncHousehold(householdId: string) {
+  const list = await stale({ householdId }, AUTO_SYNC_MS);
+  for (const c of list) await syncMpBalance(c.id);
+  return list.length;
+}
+
+/** Cron: todas las vinculaciones que no se sincronizaron en los últimos 10 minutos. */
+export async function syncAllConnections() {
+  const list = await stale({}, 10 * 60 * 1000);
+  let synced = 0;
+  for (const c of list) if ((await syncMpBalance(c.id))?.ok) synced++;
+  return { checked: list.length, synced };
+}
+
+/** Webhook: sincroniza las vinculaciones del usuario de Mercado Pago (sin esperar los 2 minutos). */
+export async function syncByMpUser(mpUserId: string) {
+  const list = await db.mpConnection.findMany({ where: { mpUserId, baseBalance: { not: null } }, select: { id: true } });
+  for (const c of list) await syncMpBalance(c.id);
+  return list.length;
 }
 
 /** Al vincular: marca si el usuario de Mercado Pago es de prueba (no toca el saldo). */

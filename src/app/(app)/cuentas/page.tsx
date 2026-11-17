@@ -14,6 +14,9 @@ import Err from "@/components/Err";
 import SubmitButton from "@/components/SubmitButton";
 import { Icon, IconTile, Notice, PageHeader } from "@/components/ui";
 import { mpStatusText } from "@/lib/mp-status";
+import MpLive from "@/components/MpLive";
+import { mpLiveData } from "@/lib/mp-live";
+import { resolvePending } from "@/lib/mp-actions";
 import { isMpAccount } from "@/lib/mp";
 import { ACCOUNT_VISUAL } from "@/lib/visuals";
 import { accountBalances } from "@/lib/balances";
@@ -67,13 +70,14 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
   const where = { householdId: m.householdId };
   await accrueYields(m.householdId); // rendimientos pendientes (por si el cron no corrió)
   const monthStart = new Date(todayAR().slice(0, 7) + "-01T00:00:00Z");
-  const [accs, balances, members, rates, yieldsMonth] = await Promise.all([
+  const [accs, balances, members, rates, yieldsMonth, mp] = await Promise.all([
     db.account.findMany({ where, orderBy: { createdAt: "asc" }, include: { mpConnection: { select: { id: true, liveMode: true, balance: true, lastSyncAt: true, syncError: true } } } }),
     // Incluye transferencias y lo apartado/retirado de ahorro.
     accountBalances(m.householdId),
     db.member.findMany({ where, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     referenceRates(m.householdId),
     db.transaction.groupBy({ by: ["accountId"], where: { ...where, type: "YIELD", voidedAt: null, date: { gte: monthStart } }, _sum: { amount: true } }),
+    mpLiveData(m),
   ]);
   const yieldOf = new Map(yieldsMonth.map((y) => [y.accountId, y._sum.amount ?? 0n]));
   // Monedas extranjeras usadas en el hogar: cada una tiene su cotización de referencia editable.
@@ -91,6 +95,7 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
     <div className="space-y-4">
       <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Cuentas" subtitle={m.household.name} right={<HideAmountsToggle />} />
       <Err e={searchParams.e} />
+      {mp && <MpLive data={mp} action={resolvePending} />}
       {searchParams.mp === "ok" && (() => {
         const c = accs.find((a) => a.mpConnection && a.ownerMemberId === m.id)?.mpConnection;
         const msg = !c ? "Cuenta vinculada con Mercado Pago." : !c.liveMode ? "Vinculada con una cuenta de prueba de Mercado Pago: el saldo de prueba no reemplaza al real." : c.syncError ? `Cuenta vinculada, pero no se pudo leer el saldo: ${c.syncError}` : "Cuenta vinculada. El saldo ahora es el real de Mercado Pago.";

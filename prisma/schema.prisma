@@ -68,6 +68,7 @@ model Household {
   monthlyGoals        MonthlyGoal[]
   splitGroups         SplitGroup[]
   mpConnections       MpConnection[]
+  pendingMovements    PendingMovement[]
 }
 
 model Member {
@@ -121,6 +122,7 @@ model Account {
   paidInstallments Installment[]
   savingsMoves     SavingsMovement[]
   mpConnection     MpConnection?
+  pendingMovements PendingMovement[]
 
   @@index([householdId])
   @@index([ownerMemberId])
@@ -487,12 +489,57 @@ model MpConnection {
   syncError       String?
   /// Cuándo se leyó el saldo por última vez con éxito.
   lastSyncAt      DateTime?
+  /// Último intento de sincronizar (exitoso o no): evita repetir llamadas a Mercado Pago a cada rato.
+  lastAttemptAt   DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @default(now()) @updatedAt
   household       Household @relation(fields: [householdId], references: [id])
   account         Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   member          Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  pendings        PendingMovement[]
 
   @@index([householdId])
   @@index([mpUserId])
+}
+
+enum PendingStatus {
+  PENDING
+  DONE
+  DISMISSED
+}
+
+enum PendingDirection {
+  IN
+  OUT
+}
+
+/// Movimiento traído de Mercado Pago que el usuario tiene que categorizar.
+/// Idempotencia: un pago de Mercado Pago (mpPaymentId) genera a lo sumo un pendiente por cuenta.
+model PendingMovement {
+  id            String           @id @default(uuid())
+  householdId   String
+  accountId     String
+  connectionId  String
+  mpPaymentId   String
+  direction     PendingDirection
+  /// TRANSFER | PAYMENT (según operation_type de Mercado Pago).
+  kind          String
+  amount        BigInt
+  currency      String
+  description   String?
+  /// Nombre de la otra persona, si Mercado Pago lo informa.
+  counterpart   String?
+  occurredAt    DateTime
+  status        PendingStatus    @default(PENDING)
+  /// Movimiento creado al categorizarlo.
+  transactionId String?
+  resolvedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  household     Household        @relation(fields: [householdId], references: [id])
+  account       Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  connection    MpConnection     @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, mpPaymentId])
+  @@index([householdId, status])
+  @@index([connectionId])
 }
