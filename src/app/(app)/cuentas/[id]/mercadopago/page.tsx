@@ -12,15 +12,15 @@ export default async function MercadoPago({ params, searchParams: sp }: { params
   const m = await requireMember();
   const acc = await db.account.findFirst({
     where: { id: params.id, householdId: m.householdId },
-    select: { id: true, name: true, ownerMemberId: true, mpConnection: { select: { id: true, mpUserId: true, memberId: true, createdAt: true, expiresAt: true, liveMode: true, balance: true, balanceCurrency: true, lastSyncAt: true, syncError: true, accessTokenEnc: true, refreshTokenEnc: true, member: { select: { name: true } } } } },
+    select: { id: true, name: true, currency: true, ownerMemberId: true, mpConnection: { select: { id: true, mpUserId: true, memberId: true, createdAt: true, expiresAt: true, liveMode: true, baseBalance: true, baseAt: true, balance: true, balanceCurrency: true, lastSyncAt: true, syncError: true, accessTokenEnc: true, refreshTokenEnc: true, member: { select: { name: true } } } } },
   });
   if (!acc) notFound();
   const c = acc.mpConnection;
   const canLink = acc.ownerMemberId !== m.id ? "Solo el dueño de la cuenta la puede vincular." : !isMpAccount(acc.name) ? "Solo se pueden vincular cuentas que se llamen \"Mercado Pago\"." : null;
   // Las pruebas usan el token de quien vinculó: solo las puede correr esa persona, y solo al tocar "Probar conexión".
-  const probes = c && c.memberId === m.id && sp.probar === "1" ? await diagnose(c, c.mpUserId) : null;
+  const probes = c && c.memberId === m.id && sp.probar === "1" ? await diagnose(c, acc.currency) : null;
   return (
-    <MpLinkView account={{ id: acc.id, name: acc.name }} canLink={canLink} probes={probes} sp={sp}
-      linked={c ? { mpUserId: c.mpUserId, createdAt: c.createdAt, expiresAt: c.expiresAt, mine: c.memberId === m.id, byName: c.member.name, liveMode: c.liveMode, balance: c.balance, balanceCurrency: c.balanceCurrency, lastSyncAt: c.lastSyncAt, syncError: c.syncError } : null} />
+    <MpLinkView account={{ id: acc.id, name: acc.name, currency: acc.currency }} canLink={canLink} probes={probes} sp={sp}
+      linked={c ? { mpUserId: c.mpUserId, createdAt: c.createdAt, expiresAt: c.expiresAt, mine: c.memberId === m.id, byName: c.member.name, liveMode: c.liveMode, balance: c.balance, balanceCurrency: c.balanceCurrency, lastSyncAt: c.lastSyncAt, syncError: c.syncError, baseBalance: c.baseBalance, baseAt: c.baseAt } : null} />
   );
 }

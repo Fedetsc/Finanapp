@@ -1,25 +1,18 @@
-// Lectura del saldo real de Mercado Pago (solo lectura). SOLO servidor.
+// Saldo de una cuenta vinculada con Mercado Pago. SOLO servidor.
+// La API oficial no tiene un endpoint de saldo, así que el saldo es:
+//   saldo inicial (lo carga el usuario al vincular) + pagos aprobados desde ese momento (GET /v1/payments/search).
 import { db } from "./db";
 import { mpGet, MpError, type MpResult } from "./mp";
 
 type Obj = Record<string, unknown>;
+type Conn = Parameters<typeof mpGet>[0];
 const obj = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
+const idOf = (v: unknown) => { const x = obj(v).id; return x === undefined || x === null ? null : String(x); };
 
 /** Monto de Mercado Pago (número o texto con punto decimal, en pesos) -> centavos. */
 export function toCentsMp(v: unknown): bigint | null {
   const n = typeof v === "number" ? v : typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : NaN;
   return Number.isFinite(n) ? BigInt(Math.round(n * 100)) : null;
-}
-
-/**
- * Saldo de la respuesta de /v1/account/balance. Usamos el disponible (lo que muestra la app de Mercado Pago);
- * si no viene, el total.
- */
-export function parseBalance(body: unknown): { cents: bigint; currency: string } | null {
-  const b = obj(body);
-  const cents = toCentsMp(b.available_balance) ?? toCentsMp(b.total_amount);
-  if (cents === null) return null;
-  return { cents, currency: typeof b.currency_id === "string" ? b.currency_id.toUpperCase() : "ARS" };
 }
 
 /** ¿El usuario de Mercado Pago es de prueba? (/users/me trae la etiqueta "test_user"). */
@@ -28,35 +21,95 @@ export function isTestUser(body: unknown) {
   return Array.isArray(tags) && tags.includes("test_user");
 }
 
-const errorOf = (r: MpResult) =>
-  r.status === 404 ? "Mercado Pago no expone el saldo para esta cuenta (404)."
-  : r.status === 401 || r.status === 403 ? `Mercado Pago no dio permiso para leer el saldo (${r.status}).`
-  : r.error ?? `Mercado Pago respondió ${r.status ?? "sin respuesta"} al pedir el saldo.`;
-
 /**
- * Lee el saldo y lo guarda en la vinculación. Nunca lanza: si falla, guarda el motivo en syncError.
- * `checkTestUser` (al vincular) confirma con /users/me si el usuario es de prueba.
+ * Cuánto mueve un pago el saldo de `me` (centavos), o null si no cuenta.
+ * Solo pagos aprobados, en la moneda de la cuenta y aprobados desde `since`.
+ * Cobré: + lo que me quedó neto (net_received_amount). Pagué: − lo que pagué (total_paid_amount).
  */
-export async function syncMpBalance(connectionId: string, opts: { checkTestUser?: boolean } = {}) {
-  const conn = await db.mpConnection.findUnique({ where: { id: connectionId }, select: { id: true, accessTokenEnc: true, refreshTokenEnc: true, expiresAt: true, liveMode: true } });
-  if (!conn) return;
+export function paymentDelta(p: unknown, me: string, currency: string, since: Date): bigint | null {
+  const x = obj(p);
+  if (x.status !== "approved") return null;
+  if (typeof x.currency_id === "string" && x.currency_id.toUpperCase() !== currency) return null;
+  const approved = Date.parse(String(x.date_approved ?? x.date_created ?? ""));
+  if (!Number.isFinite(approved) || approved < since.getTime()) return null;
+  const det = obj(x.transaction_details);
+  const collector = idOf(x.collector) ?? (x.collector_id === undefined || x.collector_id === null ? null : String(x.collector_id));
+  const payer = idOf(x.payer);
+  if (collector === me && payer === me) return 0n;
+  if (collector === me) return toCentsMp(det.net_received_amount) ?? toCentsMp(x.transaction_amount);
+  if (payer === me) { const v = toCentsMp(det.total_paid_amount) ?? toCentsMp(x.transaction_amount); return v === null ? null : -v; }
+  return null;
+}
+
+const PAGE = 100, MAX_PAGES = 20;
+
+/** Busca pagos (paginado) con un filtro. Devuelve los resultados o el primer error. */
+async function searchAll(conn: Conn, filter: string, since: Date): Promise<{ results: unknown[]; error?: MpResult }> {
+  const results: unknown[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const q = new URLSearchParams({ sort: "date_created", criteria: "asc", range: "date_created", begin_date: since.toISOString(), end_date: "NOW", limit: String(PAGE), offset: String(page * PAGE) });
+    const r = await mpGet(conn, `/v1/payments/search?${q}&${filter}`);
+    if (!r.ok) return { results, error: r };
+    const b = obj(r.body);
+    const got = Array.isArray(b.results) ? b.results : [];
+    results.push(...got);
+    const total = Number(obj(b.paging).total);
+    if (got.length < PAGE || (Number.isFinite(total) && results.length >= total)) break;
+  }
+  return { results };
+}
+
+export type BalanceCalc = { ok: true; balance: bigint; base: bigint; delta: bigint; count: number } | { ok: false; error: string; failed?: MpResult };
+
+/** Calcula el saldo (no guarda nada). */
+export async function computeMpBalance(conn: Conn & { mpUserId: string; baseBalance: bigint | null; baseAt: Date | null }, currency: string): Promise<BalanceCalc> {
+  if (conn.baseBalance === null || !conn.baseAt) return { ok: false, error: "Falta cargar el saldo inicial." };
+  const me = conn.mpUserId;
+  const [cobros, pagos] = await Promise.all([searchAll(conn, `collector.id=${me}`, conn.baseAt), searchAll(conn, `payer.id=${me}`, conn.baseAt)]);
+  const failed = cobros.error ?? pagos.error;
+  if (failed) return { ok: false, error: `Mercado Pago respondió ${failed.status ?? "sin respuesta"} al buscar pagos.`, failed };
+  const seen = new Set<string>();
+  let delta = 0n, count = 0;
+  for (const p of [...cobros.results, ...pagos.results]) {
+    const id = String(obj(p).id ?? "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const d = paymentDelta(p, me, currency, conn.baseAt);
+    if (d === null) continue;
+    delta += d; count++;
+  }
+  return { ok: true, balance: conn.baseBalance + delta, base: conn.baseBalance, delta, count };
+}
+
+/** "Sincronizar": recalcula y guarda el saldo. Nunca lanza: si falla, guarda el motivo en syncError. */
+export async function syncMpBalance(connectionId: string): Promise<BalanceCalc | null> {
+  const conn = await db.mpConnection.findUnique({
+    where: { id: connectionId },
+    select: { id: true, mpUserId: true, accessTokenEnc: true, refreshTokenEnc: true, expiresAt: true, baseBalance: true, baseAt: true, account: { select: { currency: true } } },
+  });
+  if (!conn) return null;
   try {
-    let liveMode = conn.liveMode;
-    if (opts.checkTestUser) {
-      const me = await mpGet(conn, "/users/me");
-      if (me.ok && isTestUser(me.body)) liveMode = false;
-    }
-    const r = await mpGet(conn, "/v1/account/balance");
-    const bal = r.ok ? parseBalance(r.body) : null;
+    const r = await computeMpBalance(conn, conn.account.currency);
     await db.mpConnection.update({
       where: { id: conn.id },
-      data: bal
-        ? { liveMode, balance: bal.cents, balanceCurrency: bal.currency, lastSyncAt: new Date(), syncError: null }
-        : { liveMode, syncError: r.ok ? "Mercado Pago respondió sin un saldo reconocible." : errorOf(r) },
+      data: r.ok ? { balance: r.balance, balanceCurrency: conn.account.currency, lastSyncAt: new Date(), syncError: null } : { syncError: r.error },
     });
+    return r;
   } catch (e) {
     // Solo el tipo de error: nunca tokens ni la respuesta.
     if (!(e instanceof MpError)) console.error("[mp sync]", e instanceof Error ? e.name : "error");
-    await db.mpConnection.update({ where: { id: conn.id }, data: { syncError: e instanceof MpError ? e.message : "No se pudo leer el saldo." } }).catch(() => {});
+    const error = e instanceof MpError ? e.message : "No se pudo calcular el saldo.";
+    await db.mpConnection.update({ where: { id: conn.id }, data: { syncError: error } }).catch(() => {});
+    return { ok: false, error };
   }
+}
+
+/** Al vincular: marca si el usuario de Mercado Pago es de prueba (no toca el saldo). */
+export async function checkTestUser(connectionId: string) {
+  const conn = await db.mpConnection.findUnique({ where: { id: connectionId }, select: { id: true, accessTokenEnc: true, refreshTokenEnc: true, expiresAt: true } });
+  if (!conn) return;
+  try {
+    const me = await mpGet(conn, "/users/me");
+    if (me.ok && isTestUser(me.body)) await db.mpConnection.update({ where: { id: conn.id }, data: { liveMode: false } });
+  } catch { /* si no responde, queda como estaba */ }
 }

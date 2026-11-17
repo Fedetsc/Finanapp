@@ -477,7 +477,10 @@ model MpConnection {
   expiresAt       DateTime
   /// false si la vinculación es de una cuenta/credencial de prueba: su saldo nunca reemplaza al real.
   liveMode        Boolean   @default(true)
-  /// Saldo leído de Mercado Pago (centavos). Solo lectura; null si todavía no se pudo leer.
+  /// Saldo inicial que cargó el usuario (lo que veía en la app de Mercado Pago) y desde cuándo cuenta.
+  baseBalance     BigInt?
+  baseAt          DateTime?
+  /// Saldo calculado: baseBalance + pagos aprobados desde baseAt (centavos). null si falta el saldo inicial.
   balance         BigInt?
   balanceCurrency String?
   /// Último error al leer el saldo (mensaje para mostrar, sin datos sensibles).

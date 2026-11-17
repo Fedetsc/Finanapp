@@ -17,5 +17,5 @@ export function mpStatusText(c: MpStatus, now = Date.now()): { text: string; ok:
   if (!c.liveMode) return { text: "Vinculada • De prueba (no cambia el saldo real)", ok: false };
   if (c.syncError) return { text: "Vinculada • No se pudo leer el saldo", ok: false };
   if (c.balance !== null && c.lastSyncAt) return { text: `Vinculada • Actualizado ${ago(c.lastSyncAt, now)}`, ok: true };
-  return { text: "Vinculada • Saldo pendiente", ok: false };
+  return { text: "Vinculada • Falta el saldo inicial", ok: false };
 }
