@@ -14,12 +14,19 @@ import Amt, { MASK } from "@/components/Amt";
 import QuickAdd from "@/components/QuickAdd";
 import { quickAdd } from "@/lib/quick-actions";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { monthGoals } from "@/lib/goals";
 import GoalBar from "@/components/GoalBar";
 import GoalAlerts, { type GoalAlert } from "@/components/GoalAlerts";
 
 /** Inicio: solo totales (los gráficos están en /resumen). */
-export default async function Home() {
+export default async function Home({ searchParams: sp = {} }: { searchParams?: { code?: string; state?: string; error?: string } }) {
+  // Vuelta del OAuth de Mercado Pago cuando el Redirect URI registrado es la home: se reenvía al callback,
+  // que valida el state contra la cookie y cambia el code por tokens.
+  if (sp.state && (sp.code || sp.error)) {
+    const q = new URLSearchParams({ state: sp.state, ...(sp.code ? { code: sp.code } : {}), ...(sp.error ? { error: sp.error } : {}) });
+    redirect(`/api/mp/callback?${q}`);
+  }
   const m = await requireMember();
   const hid = m.householdId;
   // Las compras con tarjeta no son movimientos: solo cuentan cuando se paga cada cuota.

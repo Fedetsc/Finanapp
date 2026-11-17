@@ -28,7 +28,7 @@ export function authorizationUrl(state: string) {
   return `${AUTH}?${q}`;
 }
 
-type TokenResponse = { access_token: string; refresh_token?: string; expires_in: number; user_id: number | string };
+type TokenResponse = { access_token: string; refresh_token?: string; expires_in: number; user_id: number | string; live_mode?: boolean };
 
 /** POST /oauth/token. Solo devuelve un mensaje genérico si falla (la respuesta de error no se loguea completa). */
 async function tokenRequest(body: Record<string, string>): Promise<TokenResponse> {
@@ -52,9 +52,13 @@ export function exchangeCode(code: string) {
   return tokenRequest({ grant_type: "authorization_code", client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri });
 }
 
+/** Credenciales de prueba: Mercado Pago devuelve live_mode=false o tokens que empiezan con TEST-. */
+export const isLiveToken = (t: Pick<TokenResponse, "access_token" | "live_mode">) => t.live_mode !== false && !t.access_token.startsWith("TEST-");
+
 /** Datos cifrados listos para guardar en MpConnection. */
 export function sealTokens(t: TokenResponse) {
   return {
+    liveMode: isLiveToken(t),
     mpUserId: String(t.user_id),
     accessTokenEnc: encryptToken(t.access_token),
     refreshTokenEnc: t.refresh_token ? encryptToken(t.refresh_token) : null,

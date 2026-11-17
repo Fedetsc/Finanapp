@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "./db";
 import { requireMember } from "./session";
+import { syncMpBalance } from "./mp-sync";
 
 /**
  * Desvincula la cuenta: borra los tokens guardados. La cuenta vuelve a ser manual.
@@ -20,4 +21,17 @@ export async function unlinkMp(fd: FormData) {
   ]);
   revalidatePath("/cuentas", "layout");
   redirect(`/cuentas/${encodeURIComponent(accountId)}/mercadopago?ok=desvinculada`);
+}
+
+/** "Actualizar saldo": vuelve a leer el saldo de Mercado Pago (solo quien vinculó, porque usa su token). */
+export async function refreshMpBalance(fd: FormData) {
+  const m = await requireMember();
+  const accountId = String(fd.get("accountId") ?? "");
+  const back = `/cuentas/${encodeURIComponent(accountId)}/mercadopago`;
+  const c = await db.mpConnection.findFirst({ where: { accountId, householdId: m.householdId }, select: { id: true, memberId: true } });
+  if (!c) redirect(back);
+  if (c.memberId !== m.id) redirect(`${back}?e=${encodeURIComponent("Solo quien la vinculó puede actualizar el saldo")}`);
+  await syncMpBalance(c.id);
+  revalidatePath("/", "layout");
+  redirect(`${back}?ok=saldo`);
 }

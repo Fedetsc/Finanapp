@@ -12,7 +12,7 @@ export default async function MercadoPago({ params, searchParams: sp }: { params
   const m = await requireMember();
   const acc = await db.account.findFirst({
     where: { id: params.id, householdId: m.householdId },
-    select: { id: true, name: true, ownerMemberId: true, mpConnection: { select: { id: true, mpUserId: true, memberId: true, createdAt: true, expiresAt: true, accessTokenEnc: true, refreshTokenEnc: true, member: { select: { name: true } } } } },
+    select: { id: true, name: true, ownerMemberId: true, mpConnection: { select: { id: true, mpUserId: true, memberId: true, createdAt: true, expiresAt: true, liveMode: true, balance: true, balanceCurrency: true, lastSyncAt: true, syncError: true, accessTokenEnc: true, refreshTokenEnc: true, member: { select: { name: true } } } } },
   });
   if (!acc) notFound();
   const c = acc.mpConnection;
@@ -21,6 +21,6 @@ export default async function MercadoPago({ params, searchParams: sp }: { params
   const probes = c && c.memberId === m.id && sp.probar === "1" ? await diagnose(c, c.mpUserId) : null;
   return (
     <MpLinkView account={{ id: acc.id, name: acc.name }} canLink={canLink} probes={probes} sp={sp}
-      linked={c ? { mpUserId: c.mpUserId, createdAt: c.createdAt, expiresAt: c.expiresAt, mine: c.memberId === m.id, byName: c.member.name } : null} />
+      linked={c ? { mpUserId: c.mpUserId, createdAt: c.createdAt, expiresAt: c.expiresAt, mine: c.memberId === m.id, byName: c.member.name, liveMode: c.liveMode, balance: c.balance, balanceCurrency: c.balanceCurrency, lastSyncAt: c.lastSyncAt, syncError: c.syncError } : null} />
   );
 }

@@ -475,6 +475,14 @@ model MpConnection {
   accessTokenEnc  String
   refreshTokenEnc String?
   expiresAt       DateTime
+  /// false si la vinculación es de una cuenta/credencial de prueba: su saldo nunca reemplaza al real.
+  liveMode        Boolean   @default(true)
+  /// Saldo leído de Mercado Pago (centavos). Solo lectura; null si todavía no se pudo leer.
+  balance         BigInt?
+  balanceCurrency String?
+  /// Último error al leer el saldo (mensaje para mostrar, sin datos sensibles).
+  syncError       String?
+  /// Cuándo se leyó el saldo por última vez con éxito.
   lastSyncAt      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @default(now()) @updatedAt

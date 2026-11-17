@@ -8,6 +8,7 @@ import { fail } from "@/lib/action";
 import { ACCOUNT_TYPES, fdate, todayAR } from "@/lib/util";
 import { currencyName, money, parseRate, rateToDecimal } from "@/lib/currency";
 import { accountBalances } from "@/lib/balances";
+import { mpStatusText } from "@/lib/mp-status";
 import { arsEquivalent, referenceRates } from "@/lib/rates";
 import { accrueYields, rateOf } from "@/lib/yields";
 import { canYield, dailyYield, parseYieldForm } from "@/lib/yield-math";
@@ -48,7 +49,7 @@ async function saveYield(fd: FormData) {
 export default async function Cuenta({ params, searchParams }: { params: { id: string }; searchParams: { e?: string; ok?: string } }) {
   const m = await requireMember();
   await accrueYields(m.householdId);
-  const acc = await db.account.findFirst({ where: { id: params.id, householdId: m.householdId }, include: { owner: { select: { name: true } } } });
+  const acc = await db.account.findFirst({ where: { id: params.id, householdId: m.householdId }, include: { owner: { select: { name: true } }, mpConnection: { select: { liveMode: true, balance: true, lastSyncAt: true, syncError: true } } } });
   if (!acc) notFound();
   const own = acc.ownerMemberId === m.id;
   const monthStart = new Date(todayAR().slice(0, 7) + "-01T00:00:00Z");
@@ -80,7 +81,7 @@ export default async function Cuenta({ params, searchParams }: { params: { id: s
       {isMpAccount(acc.name) && (
         <Link href={`/cuentas/${acc.id}/mercadopago`} className="card flex items-center gap-3">
           <Icon name="key" className="h-5 w-5 text-primary" />
-          <span className="min-w-0 flex-1"><span className="block font-semibold">Mercado Pago real</span><span className="text-xs text-muted">Vincular y probar qué datos da tu cuenta</span></span>
+          <span className="min-w-0 flex-1"><span className="block font-semibold">Mercado Pago real</span><span className="text-xs text-muted">{acc.mpConnection ? mpStatusText(acc.mpConnection).text : "Vincular para ver el saldo real"}</span></span>
           <Icon name="chevronRight" className="h-4 w-4 text-muted" />
         </Link>
       )}
