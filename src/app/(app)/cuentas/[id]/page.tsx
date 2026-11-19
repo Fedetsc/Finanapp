@@ -17,6 +17,9 @@ import YieldFields from "@/components/YieldFields";
 import SubmitButton from "@/components/SubmitButton";
 import HideAmountsToggle from "@/components/HideAmounts";
 import { HeroCard, Notice, PageHeader } from "@/components/ui";
+import DeleteAccount from "@/components/DeleteAccount";
+import { deleteAccount } from "@/lib/account-delete";
+import { deleteInfo } from "@/lib/account-usage";
 
 const back = (id: string) => `/cuentas/${encodeURIComponent(id)}`;
 
@@ -75,12 +78,13 @@ export default async function Cuenta({ params, searchParams }: { params: { id: s
   if (!acc) notFound();
   const own = acc.ownerMemberId === m.id;
   const monthStart = new Date(todayAR().slice(0, 7) + "-01T00:00:00Z");
-  const [balances, rates, yields, monthSum, totalSum] = await Promise.all([
+  const [balances, rates, yields, monthSum, totalSum, del] = await Promise.all([
     accountBalances(m.householdId, { accountId: acc.id }),
     referenceRates(m.householdId),
     db.transaction.findMany({ where: { accountId: acc.id, type: "YIELD" }, orderBy: { date: "desc" }, take: 90, select: { id: true, date: true, amount: true, description: true, voidedAt: true } }),
     db.transaction.aggregate({ where: { accountId: acc.id, type: "YIELD", voidedAt: null, date: { gte: monthStart } }, _sum: { amount: true } }),
     db.transaction.aggregate({ where: { accountId: acc.id, type: "YIELD", voidedAt: null }, _sum: { amount: true } }),
+    own ? deleteInfo(m.householdId, acc.id) : null,
   ]);
   const balance = balances.get(acc.id) ?? acc.openingBalance;
   const rate = rateOf(acc.yieldAnnualRate);
@@ -160,6 +164,12 @@ export default async function Cuenta({ params, searchParams }: { params: { id: s
           </ul>
         )}
       </section>
+
+      {own && del && (
+        <DeleteAccount id={acc.id} name={acc.name} balance={money(balance, cur)} hasBalance={balance !== 0n} txs={del.txs}
+          onlyAccountBlock={del.onlyAccount && del.balance !== 0n} deleteBlock={del.deleteBlock} action={deleteAccount}
+          targets={del.accounts.filter((a) => a.id !== acc.id && a.ownerMemberId === m.id && a.currency === cur).map(({ id, name }) => ({ id, name }))} />
+      )}
     </div>
   );
 }

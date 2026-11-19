@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ThemeToggle from "@/components/Theme";
 import { db } from "@/lib/db";
 import { listMemberships, requireMember, roleLabel, isAdmin } from "@/lib/session";
 import { logout } from "@/lib/household-actions";
@@ -61,6 +62,7 @@ export default async function Hogar() {
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-mint"><Icon name="home" className="h-6 w-6" /></span>
           <div className="min-w-0 flex-1"><p className="text-sm text-white/70">Tu hogar</p><p className="truncate text-xl font-extrabold tracking-tight">{m.household.name}</p></div>
           {all.length > 1 && <a href="#hogares" className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/20">Cambiar</a>}
+          <ThemeToggle tone="light" />
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
           <AvatarStack names={members.map((x) => x.name)} />

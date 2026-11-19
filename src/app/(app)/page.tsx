@@ -3,11 +3,9 @@ import { requireMember } from "@/lib/session";
 import { fmt, todayAR } from "@/lib/util";
 import { refreshInstallments } from "@/lib/billing";
 import { accountBalances } from "@/lib/balances";
-import { categoryVisual, monthLabel } from "@/lib/visuals";
+import { categoryVisual } from "@/lib/visuals";
 import HideAmountsToggle from "@/components/HideAmounts";
-import ThemeToggle from "@/components/Theme";
-import { currencyName, money } from "@/lib/currency";
-import { arsEquivalent, referenceRates } from "@/lib/rates";
+import { currencySymbol, money } from "@/lib/currency";
 import { accrueYields } from "@/lib/yields";
 import { HeroCard, Icon, IconTile } from "@/components/ui";
 import Amt, { MASK } from "@/components/Amt";
@@ -31,14 +29,13 @@ export default async function Home() {
   const nextMonth = new Date(monthStart); nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
   const monthAgo = new Date(Date.now() - 30 * 86400000);
   const lastOf = (type: "INCOME" | "EXPENSE") => db.transaction.findFirst({ where: { householdId: hid, memberId: m.id, type, voidedAt: null }, orderBy: { createdAt: "desc" }, select: { accountId: true } });
-  const [month, balances, vaults, members, accs, rates, categories, usage, lastExp, lastInc, goals] = await Promise.all([
+  const [month, balances, vaults, members, accs, categories, usage, lastExp, lastInc, goals] = await Promise.all([
     // Ingresos y gastos del mes: solo cuentas en ARS (no se mezclan monedas ni se convierte nada).
     db.transaction.groupBy({ by: ["type"], where: { householdId: hid, voidedAt: null, type: { in: ["INCOME", "EXPENSE"] }, account: { currency: "ARS" }, date: { gte: monthStart, lt: nextMonth } }, _sum: { amount: true } }),
     accountBalances(hid),
     db.$queryRaw<{ total: bigint | null }[]>`SELECT COALESCE(SUM("currentAmount"), 0)::bigint AS total FROM "SavingsVault" WHERE "householdId" = ${hid}`,
     db.member.findMany({ where: { householdId: hid }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.account.findMany({ where: { householdId: hid }, orderBy: { name: "asc" }, select: { id: true, name: true, currency: true, ownerMemberId: true } }),
-    referenceRates(hid),
     // Para el menú rápido de Ingresos/Gastos: categorías, las más usadas del último mes y la última cuenta usada.
     db.category.findMany({ where: { householdId: hid }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.transaction.groupBy({ by: ["categoryId", "type"], where: { householdId: hid, voidedAt: null, type: { in: ["INCOME", "EXPENSE"] }, date: { gte: monthAgo } }, _count: { _all: true } }),
@@ -67,6 +64,11 @@ export default async function Home() {
   const disponible = byCurrency.get("ARS") ?? 0n;
   const ahorrado = vaults[0]?.total ?? 0n;
   const total = disponible + ahorrado;
+  // Mes actual en números (MM/YYYY) para la tarjeta principal.
+  const monthNum = `${now.slice(5, 7)}/${now.slice(0, 4)}`;
+  // "US$ MEP 0,00" -> "US$ 0,00" (sin "MEP"), salvo que también haya dólar oficial y se confundan.
+  const shortSymbol = (c: string) => (c === "USD_MEP" && !byCurrency.has("USD") ? "US$" : currencySymbol(c));
+  const shortMoney = (v: bigint, c: string) => (c === "USD_MEP" && !byCurrency.has("USD") ? money(v, c).replace("US$ MEP", "US$") : money(v, c));
   const foreignTotals = [...byCurrency].filter(([c]) => c !== "ARS").sort(([a], [b]) => a.localeCompare(b));
 
   // Primero yo, después los demás.
@@ -92,7 +94,6 @@ export default async function Home() {
     return [...used, ...rest].slice(0, 5);
   };
   const ownAccounts = accs.filter((a) => a.ownerMemberId === m.id).map(({ id, name, currency }) => ({ id, name, currency }));
-  const firstName = (m.name || m.email.split("@")[0]).split(" ")[0];
 
   // Objetivos: la barra de cada miembro se ve para todos; los avisos son del hogar (para todos) y de mi meta (solo para mí).
   const hGoal = goals.find((g) => g.memberId === null);
@@ -114,44 +115,28 @@ export default async function Home() {
 
   return (
     <div>
-      <header className="mb-5 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm text-muted">{m.household.name} · {monthLabel(now, false)}</p>
-          <h1 className="truncate text-[28px] font-extrabold leading-tight tracking-tight">Hola, {firstName}</h1>
-        </div>
-        <ThemeToggle />
-      </header>
-
       <GoalAlerts alerts={alerts} />
 
-      <HeroCard>
+      <HeroCard className="!p-5">
+        {/* 3. Mes y año en números + ojito */}
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-white/70">{foreignTotals.length ? "Total ARS" : "Saldo total"}</p>
+          <p className="text-xs font-semibold tabular-nums text-white/60">{monthNum}</p>
           <HideAmountsToggle tone="light" />
         </div>
-        <p className="mt-1 text-[40px] font-extrabold leading-none tracking-tight tabular-nums"><Amt>{fmt(total)}</Amt></p>
-        <span className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${balance >= 0n ? "bg-mint/20 text-mint" : "bg-[#FDECEE]/20 text-[#FFB3B6]"}`}>
+        <p className="-mt-1 text-sm text-white/70">{foreignTotals.length ? "Total ARS" : "Saldo total"}</p>
+        <p className="mt-0.5 text-[36px] font-extrabold leading-none tracking-tight tabular-nums"><Amt>{fmt(total)}</Amt></p>
+        <span className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${balance >= 0n ? "bg-mint/20 text-mint" : "bg-[#FDECEE]/20 text-[#FFB3B6]"}`}>
           <Icon name="trend" className="h-3.5 w-3.5" />{balance >= 0n ? "+" : ""}<Amt>{fmt(balance)}</Amt> este mes
         </span>
-        <dl className="mt-5 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-white/10 px-3.5 py-2.5"><dt className="text-[11px] text-white/60">Disponible para gastar</dt><dd className="font-bold tabular-nums"><Amt>{fmt(disponible)}</Amt></dd></div>
-          <div className="rounded-2xl bg-white/10 px-3.5 py-2.5"><dt className="text-[11px] text-white/60">Ahorrado</dt><dd className="font-bold tabular-nums"><Amt>{fmt(ahorrado)}</Amt></dd></div>
+        <dl className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl bg-white/10 px-3 py-2"><dt className="text-[11px] text-white/60">Disponible para gastar</dt><dd className="font-bold tabular-nums"><Amt>{fmt(disponible)}</Amt></dd></div>
+          <div className="rounded-2xl bg-white/10 px-3 py-2"><dt className="text-[11px] text-white/60">Ahorrado</dt><dd className="font-bold tabular-nums"><Amt>{fmt(ahorrado)}</Amt></dd></div>
         </dl>
-        {foreignTotals.length > 0 && (
-          <dl className="mt-3 space-y-1.5 border-t border-white/15 pt-3">
-            {foreignTotals.map(([c, v]) => (
-              <div key={c} className="flex items-baseline justify-between gap-3">
-                <dt className="text-sm text-white/70">Total {currencyName(c)}</dt>
-                <dd className="text-right"><span className="block font-bold tabular-nums"><Amt c={c}>{money(v, c)}</Amt></span>{arsEquivalent(v, c, rates) && <span className="block text-[11px] text-white/60 tabular-nums"><Amt mask={`≈ $ ${MASK}`}>{arsEquivalent(v, c, rates)}</Amt></span>}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        <div className="mt-3 border-t border-white/15 pt-3">
+        <div className="mt-3 border-t border-white/15 pt-2.5">
           <p className="text-[11px] text-white/60">En las cuentas de cada uno</p>
-          <ul className="mt-2 flex flex-wrap gap-2">
+          <ul className="mt-1.5 flex flex-wrap gap-1.5">
             {people.map((p) => (
-              <li key={p.id} className="flex min-w-0 items-baseline gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm">
+              <li key={p.id} className="flex min-w-0 items-baseline gap-2 rounded-full bg-white/10 px-3 py-1 text-sm">
                 <span className="truncate text-white/75">{p.name}</span>
                 <b className="tabular-nums"><Amt>{fmt(p.ars)}</Amt></b>
                 {p.foreign.map(([c, v]) => <span key={c} className="text-xs text-white/60 tabular-nums">· <Amt c={c}>{money(v, c)}</Amt></span>)}
@@ -159,9 +144,10 @@ export default async function Home() {
             ))}
           </ul>
         </div>
-        <div className="mt-3 border-t border-white/15 pt-3">
+        <div className="mt-2.5 flex items-end justify-between gap-3 border-t border-white/15 pt-2.5">
+          <div className="min-w-0 flex-1">
           {hGoal || mGoals.length ? (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {hGoal && (
                 <div>
                   <p className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs text-white/70">
@@ -186,6 +172,13 @@ export default async function Home() {
             <Link href="/hogar/objetivo" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/20 active:scale-95">
               <Icon name="target" className="h-3.5 w-3.5" />Definir objetivo
             </Link>
+          )}
+          </div>
+          {/* 5. Saldo en otras monedas: chiquito, abajo a la derecha, sin etiqueta */}
+          {foreignTotals.length > 0 && (
+            <p className="shrink-0 text-right text-[11px] leading-tight text-white/55 tabular-nums">
+              {foreignTotals.map(([c, v]) => <span key={c} className="block"><Amt c={c} mask={`${shortSymbol(c)} ${MASK}`}>{shortMoney(v, c)}</Amt></span>)}
+            </p>
           )}
         </div>
       </HeroCard>

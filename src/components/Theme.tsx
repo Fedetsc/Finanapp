@@ -26,13 +26,13 @@ export function useDarkTheme() {
   return useSyncExternalStore(subscribe, read, () => false);
 }
 
-/** Botón sol/luna: cambia entre tema claro y oscuro. */
-export default function ThemeToggle() {
+/** Botón sol/luna: cambia entre tema claro y oscuro. `tone="light"` para usarlo sobre la tarjeta azul. */
+export default function ThemeToggle({ tone = "default" }: { tone?: "default" | "light" }) {
   const dark = useDarkTheme();
   const label = dark ? "Cambiar a tema claro" : "Cambiar a tema oscuro";
   return (
     <button type="button" onClick={() => apply(!dark)} aria-label={label} title={label}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface text-text shadow-soft transition duration-150 hover:text-primary active:scale-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition duration-150 active:scale-90 focus-visible:outline focus-visible:outline-2 ${tone === "light" ? "bg-white/15 text-white hover:bg-white/25 focus-visible:outline-white" : "bg-surface text-text shadow-soft hover:text-primary focus-visible:outline-primary"}`}>
       <Icon key={dark ? "sun" : "moon"} name={dark ? "sun" : "moon"} className="nav-pop h-5 w-5" />
     </button>
   );

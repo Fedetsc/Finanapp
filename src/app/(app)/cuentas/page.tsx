@@ -12,7 +12,7 @@ import CurrencyPicker from "@/components/CurrencyPicker";
 import HideAmountsToggle from "@/components/HideAmounts";
 import Err from "@/components/Err";
 import SubmitButton from "@/components/SubmitButton";
-import { IconTile, PageHeader } from "@/components/ui";
+import { IconTile, Notice, PageHeader } from "@/components/ui";
 import { ACCOUNT_VISUAL } from "@/lib/visuals";
 import { accountBalances } from "@/lib/balances";
 import Amt, { MASK } from "@/components/Amt";
@@ -60,7 +60,7 @@ async function saveRate(fd: FormData) {
 }
 
 /** ver: "mias" (por defecto) | "todas" | id de otro miembro del hogar */
-export default async function Cuentas({ searchParams }: { searchParams: { e?: string; ok?: string; ver?: string; cotizacion?: string } }) {
+export default async function Cuentas({ searchParams }: { searchParams: { e?: string; ok?: string; ver?: string; cotizacion?: string; eliminada?: string } }) {
   const m = await requireMember();
   const where = { householdId: m.householdId };
   await accrueYields(m.householdId); // rendimientos pendientes (por si el cron no corrió)
@@ -89,6 +89,7 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
     <div className="space-y-4">
       <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Cuentas" subtitle={m.household.name} right={<HideAmountsToggle />} />
       <Err e={searchParams.e} />
+      {searchParams.eliminada && <Notice tone="ok">Cuenta eliminada.</Notice>}
       <form key={searchParams.ok} action={add} className="card grid gap-3 md:grid-cols-4">
         <input name="name" required maxLength={50} placeholder="Nombre (ej. Mercado Pago)" aria-label="Nombre" className="input md:col-span-2" />
         <select name="type" aria-label="Tipo de cuenta" className="input">{Object.entries(ACCOUNT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
