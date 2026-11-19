@@ -67,8 +67,6 @@ model Household {
   subscriptionChanges SubscriptionChange[]
   monthlyGoals        MonthlyGoal[]
   splitGroups         SplitGroup[]
-  mpConnections       MpConnection[]
-  pendingMovements    PendingMovement[]
 }
 
 model Member {
@@ -89,7 +87,6 @@ model Member {
   savingsMoves      SavingsMovement[]
   monthlyGoals      MonthlyGoal[]
   splitParticipants SplitParticipant[]
-  mpConnections     MpConnection[]
 
   @@unique([userId, householdId])
   @@index([userId])
@@ -121,8 +118,6 @@ model Account {
   subscriptions    Subscription[]
   paidInstallments Installment[]
   savingsMoves     SavingsMovement[]
-  mpConnection     MpConnection?
-  pendingMovements PendingMovement[]
 
   @@index([householdId])
   @@index([ownerMemberId])
@@ -462,84 +457,4 @@ model SplitSettlement {
 
   @@index([groupId, createdAt])
   @@index([householdId])
-}
-
-/// Vínculo de una cuenta de la app con una cuenta real de Mercado Pago (OAuth). Una por cuenta.
-/// Los tokens se guardan SOLO cifrados (AES-256-GCM con MP_TOKEN_SECRET) y nunca salen del servidor.
-model MpConnection {
-  id              String    @id @default(uuid())
-  householdId     String
-  accountId       String    @unique
-  /// Quién vinculó (dueño de la cuenta).
-  memberId        String
-  /// Id del usuario en Mercado Pago.
-  mpUserId        String
-  accessTokenEnc  String
-  refreshTokenEnc String?
-  expiresAt       DateTime
-  /// false si la vinculación es de una cuenta/credencial de prueba: su saldo nunca reemplaza al real.
-  liveMode        Boolean   @default(true)
-  /// Saldo inicial que cargó el usuario (lo que veía en la app de Mercado Pago) y desde cuándo cuenta.
-  baseBalance     BigInt?
-  baseAt          DateTime?
-  /// Saldo calculado: baseBalance + pagos aprobados desde baseAt (centavos). null si falta el saldo inicial.
-  balance         BigInt?
-  balanceCurrency String?
-  /// Último error al leer el saldo (mensaje para mostrar, sin datos sensibles).
-  syncError       String?
-  /// Cuándo se leyó el saldo por última vez con éxito.
-  lastSyncAt      DateTime?
-  /// Último intento de sincronizar (exitoso o no): evita repetir llamadas a Mercado Pago a cada rato.
-  lastAttemptAt   DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @default(now()) @updatedAt
-  household       Household @relation(fields: [householdId], references: [id])
-  account         Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  member          Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  pendings        PendingMovement[]
-
-  @@index([householdId])
-  @@index([mpUserId])
-}
-
-enum PendingStatus {
-  PENDING
-  DONE
-  DISMISSED
-}
-
-enum PendingDirection {
-  IN
-  OUT
-}
-
-/// Movimiento traído de Mercado Pago que el usuario tiene que categorizar.
-/// Idempotencia: un pago de Mercado Pago (mpPaymentId) genera a lo sumo un pendiente por cuenta.
-model PendingMovement {
-  id            String           @id @default(uuid())
-  householdId   String
-  accountId     String
-  connectionId  String
-  mpPaymentId   String
-  direction     PendingDirection
-  /// TRANSFER | PAYMENT (según operation_type de Mercado Pago).
-  kind          String
-  amount        BigInt
-  currency      String
-  description   String?
-  /// Nombre de la otra persona, si Mercado Pago lo informa.
-  counterpart   String?
-  occurredAt    DateTime
-  status        PendingStatus    @default(PENDING)
-  /// Movimiento creado al categorizarlo.
-  transactionId String?
-  resolvedAt    DateTime?
-  createdAt     DateTime         @default(now())
-  household     Household        @relation(fields: [householdId], references: [id])
-  account       Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  connection    MpConnection     @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-
-  @@unique([accountId, mpPaymentId])
-  @@index([householdId, status])
-  @@index([connectionId])
 }

@@ -1,14 +1,12 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
 import { fail } from "@/lib/action";
-import { ACCOUNT_TYPES, fdate, todayAR } from "@/lib/util";
+import { ACCOUNT_TYPES, fdate, fmt, toCents, todayAR } from "@/lib/util";
 import { currencyName, money, parseRate, rateToDecimal } from "@/lib/currency";
 import { accountBalances } from "@/lib/balances";
-import { mpStatusText } from "@/lib/mp-status";
 import { arsEquivalent, referenceRates } from "@/lib/rates";
 import { accrueYields, rateOf } from "@/lib/yields";
 import { canYield, dailyYield, parseYieldForm } from "@/lib/yield-math";
@@ -18,8 +16,7 @@ import Amt, { MASK } from "@/components/Amt";
 import YieldFields from "@/components/YieldFields";
 import SubmitButton from "@/components/SubmitButton";
 import HideAmountsToggle from "@/components/HideAmounts";
-import { HeroCard, Icon, Notice, PageHeader } from "@/components/ui";
-import { isMpAccount } from "@/lib/mp";
+import { HeroCard, Notice, PageHeader } from "@/components/ui";
 
 const back = (id: string) => `/cuentas/${encodeURIComponent(id)}`;
 
@@ -46,10 +43,35 @@ async function saveYield(fd: FormData) {
   redirect(`${back(id)}?ok=${Date.now()}`);
 }
 
-export default async function Cuenta({ params, searchParams }: { params: { id: string }; searchParams: { e?: string; ok?: string } }) {
+/**
+ * Editar saldo a mano (solo el dueño): se escribe el saldo real y se ajusta el saldo inicial por la diferencia.
+ * No crea movimientos, así que no cuenta como ingreso ni gasto del mes. Los movimientos existentes no cambian.
+ */
+async function saveBalance(fd: FormData) {
+  "use server";
+  const m = await requireMember();
+  const id = String(fd.get("id") ?? "");
+  try {
+    const target = toCents(String(fd.get("balance") ?? "").replace("$", ""));
+    await db.$transaction(async (tx) => {
+      const acc = await tx.account.findUnique({ where: { id }, select: { householdId: true, ownerMemberId: true, openingBalance: true } });
+      if (!acc || acc.householdId !== m.householdId) throw new Error("Cuenta no encontrada");
+      if (acc.ownerMemberId !== m.id) throw new Error("Solo el dueño de la cuenta puede editar el saldo");
+      const current = (await accountBalances(m.householdId, { client: tx, accountId: id })).get(id) ?? acc.openingBalance;
+      const diff = target - current;
+      if (diff === 0n) return;
+      await tx.account.update({ where: { id }, data: { openingBalance: acc.openingBalance + diff } });
+      await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "UPDATE_BALANCE", entity: "Account", entityId: id } });
+    });
+  } catch (e) { fail(back(id), e); }
+  revalidatePath("/", "layout");
+  redirect(`${back(id)}?saldo=${Date.now()}`);
+}
+
+export default async function Cuenta({ params, searchParams }: { params: { id: string }; searchParams: { e?: string; ok?: string; saldo?: string } }) {
   const m = await requireMember();
   await accrueYields(m.householdId);
-  const acc = await db.account.findFirst({ where: { id: params.id, householdId: m.householdId }, include: { owner: { select: { name: true } }, mpConnection: { select: { liveMode: true, balance: true, lastSyncAt: true, syncError: true } } } });
+  const acc = await db.account.findFirst({ where: { id: params.id, householdId: m.householdId }, include: { owner: { select: { name: true } } } });
   if (!acc) notFound();
   const own = acc.ownerMemberId === m.id;
   const monthStart = new Date(todayAR().slice(0, 7) + "-01T00:00:00Z");
@@ -71,6 +93,7 @@ export default async function Cuenta({ params, searchParams }: { params: { id: s
       <PageHeader back={{ href: "/cuentas", label: "Cuentas" }} title={acc.name} subtitle={`${ACCOUNT_TYPES[acc.type]} · ${currencyName(cur)}${own ? "" : ` · De ${acc.owner.name}`}`} right={<HideAmountsToggle />} />
       <Err e={searchParams.e} />
       {searchParams.ok && <Notice tone="ok">Rendimientos actualizados.</Notice>}
+      {searchParams.saldo && <Notice tone="ok">Saldo actualizado.</Notice>}
 
       <HeroCard>
         <p className="text-sm text-white/70">Saldo</p>
@@ -78,12 +101,16 @@ export default async function Cuenta({ params, searchParams }: { params: { id: s
         {eq && <p className="mt-1 text-xs text-white/60 tabular-nums"><Amt mask={`≈ $ ${MASK}`}>{eq}</Amt></p>}
       </HeroCard>
 
-      {isMpAccount(acc.name) && (
-        <Link href={`/cuentas/${acc.id}/mercadopago`} className="card flex items-center gap-3">
-          <Icon name="key" className="h-5 w-5 text-primary" />
-          <span className="min-w-0 flex-1"><span className="block font-semibold">Mercado Pago real</span><span className="text-xs text-muted">{acc.mpConnection ? mpStatusText(acc.mpConnection).text : "Vincular para ver el saldo real"}</span></span>
-          <Icon name="chevronRight" className="h-4 w-4 text-muted" />
-        </Link>
+      {own && (
+        <form key={searchParams.saldo} action={saveBalance} className="card space-y-2">
+          <input type="hidden" name="id" value={acc.id} />
+          <label htmlFor="balance" className="block font-bold">Editar saldo</label>
+          <p className="text-xs text-muted">Escribí el saldo real de la cuenta. La diferencia ajusta el saldo inicial: no se crea ningún movimiento.</p>
+          <div className="flex gap-2">
+            <input id="balance" name="balance" required inputMode="decimal" autoComplete="off" defaultValue={balance >= 0n ? fmt(balance).slice(1) : ""} placeholder="Ej. 161.873,88" aria-label="Saldo real" className="input min-w-0 flex-1" />
+            <SubmitButton className="btn shrink-0 px-4" pendingText="...">Guardar</SubmitButton>
+          </div>
+        </form>
       )}
 
       <section className="card space-y-3">

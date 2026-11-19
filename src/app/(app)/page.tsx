@@ -14,22 +14,12 @@ import Amt, { MASK } from "@/components/Amt";
 import QuickAdd from "@/components/QuickAdd";
 import { quickAdd } from "@/lib/quick-actions";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { monthGoals } from "@/lib/goals";
 import GoalBar from "@/components/GoalBar";
 import GoalAlerts, { type GoalAlert } from "@/components/GoalAlerts";
-import MpLive from "@/components/MpLive";
-import { mpLiveData } from "@/lib/mp-live";
-import { resolvePending } from "@/lib/mp-actions";
 
 /** Inicio: solo totales (los gráficos están en /resumen). */
-export default async function Home({ searchParams: sp = {} }: { searchParams?: { code?: string; state?: string; error?: string } }) {
-  // Vuelta del OAuth de Mercado Pago cuando el Redirect URI registrado es la home: se reenvía al callback,
-  // que valida el state contra la cookie y cambia el code por tokens.
-  if (sp.state && (sp.code || sp.error)) {
-    const q = new URLSearchParams({ state: sp.state, ...(sp.code ? { code: sp.code } : {}), ...(sp.error ? { error: sp.error } : {}) });
-    redirect(`/api/mp/callback?${q}`);
-  }
+export default async function Home() {
   const m = await requireMember();
   const hid = m.householdId;
   // Las compras con tarjeta no son movimientos: solo cuentan cuando se paga cada cuota.
@@ -41,7 +31,7 @@ export default async function Home({ searchParams: sp = {} }: { searchParams?: {
   const nextMonth = new Date(monthStart); nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
   const monthAgo = new Date(Date.now() - 30 * 86400000);
   const lastOf = (type: "INCOME" | "EXPENSE") => db.transaction.findFirst({ where: { householdId: hid, memberId: m.id, type, voidedAt: null }, orderBy: { createdAt: "desc" }, select: { accountId: true } });
-  const [month, balances, vaults, members, accs, rates, categories, usage, lastExp, lastInc, goals, mp] = await Promise.all([
+  const [month, balances, vaults, members, accs, rates, categories, usage, lastExp, lastInc, goals] = await Promise.all([
     // Ingresos y gastos del mes: solo cuentas en ARS (no se mezclan monedas ni se convierte nada).
     db.transaction.groupBy({ by: ["type"], where: { householdId: hid, voidedAt: null, type: { in: ["INCOME", "EXPENSE"] }, account: { currency: "ARS" }, date: { gte: monthStart, lt: nextMonth } }, _sum: { amount: true } }),
     accountBalances(hid),
@@ -56,8 +46,6 @@ export default async function Home({ searchParams: sp = {} }: { searchParams?: {
     lastOf("INCOME"),
     // Objetivos de gasto del mes (con lo gastado de cada uno).
     monthGoals(hid, Number(now.slice(0, 4)), Number(now.slice(5, 7))),
-    // Mercado Pago: estado de la sincronización y movimientos para categorizar.
-    mpLiveData(m),
   ]);
 
   // Saldos agrupados por moneda: nunca se suman monedas distintas.
@@ -135,7 +123,6 @@ export default async function Home({ searchParams: sp = {} }: { searchParams?: {
       </header>
 
       <GoalAlerts alerts={alerts} />
-      {mp && <MpLive data={mp} action={resolvePending} />}
 
       <HeroCard>
         <div className="flex items-center justify-between gap-3">

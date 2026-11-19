@@ -12,12 +12,7 @@ import CurrencyPicker from "@/components/CurrencyPicker";
 import HideAmountsToggle from "@/components/HideAmounts";
 import Err from "@/components/Err";
 import SubmitButton from "@/components/SubmitButton";
-import { Icon, IconTile, Notice, PageHeader } from "@/components/ui";
-import { mpStatusText } from "@/lib/mp-status";
-import MpLive from "@/components/MpLive";
-import { mpLiveData } from "@/lib/mp-live";
-import { resolvePending } from "@/lib/mp-actions";
-import { isMpAccount } from "@/lib/mp";
+import { IconTile, PageHeader } from "@/components/ui";
 import { ACCOUNT_VISUAL } from "@/lib/visuals";
 import { accountBalances } from "@/lib/balances";
 import Amt, { MASK } from "@/components/Amt";
@@ -65,19 +60,18 @@ async function saveRate(fd: FormData) {
 }
 
 /** ver: "mias" (por defecto) | "todas" | id de otro miembro del hogar */
-export default async function Cuentas({ searchParams }: { searchParams: { e?: string; ok?: string; ver?: string; cotizacion?: string; mp?: string } }) {
+export default async function Cuentas({ searchParams }: { searchParams: { e?: string; ok?: string; ver?: string; cotizacion?: string } }) {
   const m = await requireMember();
   const where = { householdId: m.householdId };
   await accrueYields(m.householdId); // rendimientos pendientes (por si el cron no corrió)
   const monthStart = new Date(todayAR().slice(0, 7) + "-01T00:00:00Z");
-  const [accs, balances, members, rates, yieldsMonth, mp] = await Promise.all([
-    db.account.findMany({ where, orderBy: { createdAt: "asc" }, include: { mpConnection: { select: { id: true, liveMode: true, balance: true, lastSyncAt: true, syncError: true } } } }),
+  const [accs, balances, members, rates, yieldsMonth] = await Promise.all([
+    db.account.findMany({ where, orderBy: { createdAt: "asc" } }),
     // Incluye transferencias y lo apartado/retirado de ahorro.
     accountBalances(m.householdId),
     db.member.findMany({ where, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     referenceRates(m.householdId),
     db.transaction.groupBy({ by: ["accountId"], where: { ...where, type: "YIELD", voidedAt: null, date: { gte: monthStart } }, _sum: { amount: true } }),
-    mpLiveData(m),
   ]);
   const yieldOf = new Map(yieldsMonth.map((y) => [y.accountId, y._sum.amount ?? 0n]));
   // Monedas extranjeras usadas en el hogar: cada una tiene su cotización de referencia editable.
@@ -95,12 +89,6 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
     <div className="space-y-4">
       <PageHeader back={{ href: "/hogar", label: "Hogar" }} title="Cuentas" subtitle={m.household.name} right={<HideAmountsToggle />} />
       <Err e={searchParams.e} />
-      {mp && <MpLive data={mp} action={resolvePending} />}
-      {searchParams.mp === "ok" && (() => {
-        const c = accs.find((a) => a.mpConnection && a.ownerMemberId === m.id)?.mpConnection;
-        const msg = !c ? "Cuenta vinculada con Mercado Pago." : !c.liveMode ? "Vinculada con una cuenta de prueba de Mercado Pago: el saldo de prueba no reemplaza al real." : c.syncError ? `Cuenta vinculada, pero no se pudo leer el saldo: ${c.syncError}` : "Cuenta vinculada. El saldo ahora es el real de Mercado Pago.";
-        return <Notice tone={c && c.liveMode && !c.syncError ? "ok" : "info"}>{msg}</Notice>;
-      })()}
       <form key={searchParams.ok} action={add} className="card grid gap-3 md:grid-cols-4">
         <input name="name" required maxLength={50} placeholder="Nombre (ej. Mercado Pago)" aria-label="Nombre" className="input md:col-span-2" />
         <select name="type" aria-label="Tipo de cuenta" className="input">{Object.entries(ACCOUNT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
@@ -144,13 +132,6 @@ export default async function Cuentas({ searchParams }: { searchParams: { e?: st
                       ? <>Generó <Amt c={a.currency}>{money(yieldOf.get(a.id) ?? 0n, a.currency)}</Amt> este mes</>
                       : "informativo (el saldo ya lo incluye)"}
                   </p>
-                )}
-                {a.mpConnection ? (
-                  (() => { const st = mpStatusText(a.mpConnection); return (
-                  <Link href={`/cuentas/${a.id}/mercadopago`} className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${st.ok ? "bg-mint-soft text-pos" : "bg-[#FFF4E0] text-[#9A5B00] dark:bg-warn/15 dark:text-[#FCD34D]"}`}><Icon name={st.ok ? "check" : "key"} className="h-3.5 w-3.5" />{st.text}</Link>
-                ); })()
-                ) : mine && isMpAccount(a.name) && (
-                  <a href={`/api/mp/connect?accountId=${a.id}`} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-bg px-2.5 py-1 text-xs font-semibold text-primary"><Icon name="key" className="h-3.5 w-3.5" />Vincular con Mercado Pago real</a>
                 )}
                 <Link href={`/cuentas/${a.id}`} className="mt-3 block text-sm font-semibold text-primary">Ver detalle</Link>
               </li>

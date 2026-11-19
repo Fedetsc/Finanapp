@@ -29,8 +29,6 @@ export async function accrueYields(householdId?: string): Promise<{ accounts: nu
       ...(householdId ? { householdId } : {}),
       yieldEnabled: true,
       yieldAutoAccrue: true,
-      // Vinculadas con Mercado Pago real: el saldo ya es el de Mercado Pago (incluye lo que rindió).
-      AND: [{ OR: [{ mpConnection: null }, { mpConnection: { liveMode: false } }] }],
       yieldAnnualRate: { not: null },
       type: { in: [...YIELD_ACCOUNT_TYPES] },
       OR: [{ lastYieldAt: null }, { lastYieldAt: { lt: t } }],
