@@ -6,7 +6,8 @@ import { z } from "zod";
 import { db } from "./db";
 import { requireMember } from "./session";
 import { fail } from "./action";
-import { toCents } from "./util";
+import { fdate, toCents } from "./util";
+import { money } from "./currency";
 import { nextCycle } from "./dates";
 import { systemCategory, today } from "./billing";
 
@@ -103,4 +104,38 @@ export async function chargeSubscription(fd: FormData) {
   }
   revalidatePath("/", "layout");
   redirect(`${back}?cobrada=${Date.now()}`);
+}
+
+export type QuickPayResult = { ok: true; name: string; amount: string; next: string } | { ok: false; error: string };
+
+/**
+ * Pago rápido desde Inicio (sin salir de la página): gasto de hoy en la categoría Suscripciones por el monto
+ * actual, en la cuenta elegida. El próximo cobro pasa a "fecha sugerida + 1 ciclo" (20/11 mensual -> 20/12).
+ * Un solo cobro por suscripción y por día (único subscriptionId + date de Transaction).
+ */
+export async function paySubscriptionQuick(fd: FormData): Promise<QuickPayResult> {
+  const m = await requireMember();
+  try {
+    const id = String(fd.get("id") ?? ""), accountId = String(fd.get("accountId") ?? "");
+    const s = await ownSub(id, m);
+    if (!s.isActive) throw new Error("La suscripción está pausada");
+    const acc = await ownAccount(accountId, m);
+    if (acc.currency !== s.currency) throw new Error("Esa cuenta es de otra moneda que la suscripción");
+    const t = today();
+    const next = nextCycle(s.nextPaymentDate, s.cycle, s.nextPaymentDate.getUTCDate());
+    await db.$transaction(async (tx) => {
+      const categoryId = await systemCategory(tx, m.householdId, "Suscripciones");
+      const created = await tx.transaction.create({
+        data: { householdId: m.householdId, memberId: m.id, accountId: acc.id, categoryId, subscriptionId: s.id, type: "EXPENSE", amount: s.amount, date: t, description: s.name.slice(0, 120) },
+      });
+      await tx.subscription.update({ where: { id: s.id }, data: { lastChargedDate: t, nextPaymentDate: next } });
+      await tx.auditLog.create({ data: { householdId: m.householdId, userId: m.userId, action: "CHARGE", entity: "Subscription", entityId: created.id } });
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, name: s.name, amount: money(s.amount, s.currency), next: fdate(next) };
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return { ok: false, error: "Esta suscripción ya se pagó hoy" };
+    if (e instanceof Prisma.PrismaClientKnownRequestError || e instanceof Prisma.PrismaClientUnknownRequestError) { console.error("[paySubscriptionQuick]", e.message); return { ok: false, error: "No se pudo pagar. Probá de nuevo." }; }
+    return { ok: false, error: e instanceof Error ? e.message : "No se pudo pagar" };
+  }
 }

@@ -1,22 +1,20 @@
 import { db } from "@/lib/db";
 import { requireMember } from "@/lib/session";
-import { fmt, todayAR } from "@/lib/util";
-import { refreshInstallments } from "@/lib/billing";
+import { fdate, fmt, todayAR } from "@/lib/util";
+import { refreshInstallments, today } from "@/lib/billing";
 import { accountBalances } from "@/lib/balances";
-import { categoryVisual } from "@/lib/visuals";
-import HideAmountsToggle from "@/components/HideAmounts";
 import { currencySymbol, money } from "@/lib/currency";
 import { accrueYields } from "@/lib/yields";
-import { HeroCard, Icon, IconTile } from "@/components/ui";
-import Amt, { MASK } from "@/components/Amt";
-import QuickAdd from "@/components/QuickAdd";
-import { quickAdd } from "@/lib/quick-actions";
-import Link from "next/link";
+import HomeView from "@/components/HomeView";
+import Amt from "@/components/Amt";
+import { addDays } from "@/lib/dates";
 import { monthGoals } from "@/lib/goals";
-import GoalBar from "@/components/GoalBar";
 import GoalAlerts, { type GoalAlert } from "@/components/GoalAlerts";
 
-/** Inicio: solo totales (los gráficos están en /resumen). */
+/**
+ * Inicio: entra entera en la pantalla del celular, sin scroll (100dvh): tarjeta principal compacta,
+ * "Pagar suscripciones" (menú desde abajo) y los últimos 3 movimientos. Los gráficos están en /resumen.
+ */
 export default async function Home() {
   const m = await requireMember();
   const hid = m.householdId;
@@ -27,22 +25,23 @@ export default async function Home() {
   const now = todayAR().slice(0, 7); // mes actual
   const monthStart = new Date(now + "-01T00:00:00Z");
   const nextMonth = new Date(monthStart); nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
-  const monthAgo = new Date(Date.now() - 30 * 86400000);
-  const lastOf = (type: "INCOME" | "EXPENSE") => db.transaction.findFirst({ where: { householdId: hid, memberId: m.id, type, voidedAt: null }, orderBy: { createdAt: "desc" }, select: { accountId: true } });
-  const [month, balances, vaults, members, accs, categories, usage, lastExp, lastInc, goals] = await Promise.all([
+  const [month, balances, vaults, members, accs, goals, subs, lastSubPay, recent] = await Promise.all([
     // Ingresos y gastos del mes: solo cuentas en ARS (no se mezclan monedas ni se convierte nada).
     db.transaction.groupBy({ by: ["type"], where: { householdId: hid, voidedAt: null, type: { in: ["INCOME", "EXPENSE"] }, account: { currency: "ARS" }, date: { gte: monthStart, lt: nextMonth } }, _sum: { amount: true } }),
     accountBalances(hid),
     db.$queryRaw<{ total: bigint | null }[]>`SELECT COALESCE(SUM("currentAmount"), 0)::bigint AS total FROM "SavingsVault" WHERE "householdId" = ${hid}`,
     db.member.findMany({ where: { householdId: hid }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.account.findMany({ where: { householdId: hid }, orderBy: { name: "asc" }, select: { id: true, name: true, currency: true, ownerMemberId: true } }),
-    // Para el menú rápido de Ingresos/Gastos: categorías, las más usadas del último mes y la última cuenta usada.
-    db.category.findMany({ where: { householdId: hid }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    db.transaction.groupBy({ by: ["categoryId", "type"], where: { householdId: hid, voidedAt: null, type: { in: ["INCOME", "EXPENSE"] }, date: { gte: monthAgo } }, _count: { _all: true } }),
-    lastOf("EXPENSE"),
-    lastOf("INCOME"),
     // Objetivos de gasto del mes (con lo gastado de cada uno).
     monthGoals(hid, Number(now.slice(0, 4)), Number(now.slice(5, 7))),
+    // Pago rápido: mis suscripciones activas (solo el dueño las paga), la más cercana primero.
+    db.subscription.findMany({ where: { householdId: hid, memberId: m.id, isActive: true }, orderBy: [{ nextPaymentDate: "asc" }, { name: "asc" }], select: { id: true, name: true, amount: true, currency: true, nextPaymentDate: true } }),
+    // Cuenta con la que pagué la última suscripción (para el "Pagar con" por defecto).
+    db.transaction.findFirst({ where: { householdId: hid, memberId: m.id, subscriptionId: { not: null } }, orderBy: { createdAt: "desc" }, select: { accountId: true } }),
+    db.transaction.findMany({
+      where: { householdId: hid, voidedAt: null }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 3,
+      select: { id: true, type: true, amount: true, toAmount: true, description: true, voidedAt: true, date: true, category: { select: { name: true } }, account: { select: { name: true, currency: true } }, toAccount: { select: { name: true, currency: true } }, member: { select: { name: true } } },
+    }),
   ]);
 
   // Saldos agrupados por moneda: nunca se suman monedas distintas.
@@ -81,19 +80,12 @@ export default async function Home() {
   const inc = month.find((x) => x.type === "INCOME")?._sum.amount ?? 0n;
   const exp = month.find((x) => x.type === "EXPENSE")?._sum.amount ?? 0n;
   const balance = inc - exp;
-  const usedPct = inc > 0n ? Number((exp * 100n) / inc) : null;
-  // Top 5 por tipo (más usadas en el último mes); si faltan, se completa con las demás, sin repetir las del otro tipo.
-  const looksIncome = (n: string) => categoryVisual(n).tone === "green";
-  const topFor = (type: "INCOME" | "EXPENSE") => {
-    const count = (t: string) => new Map(usage.filter((u) => u.type === t && u.categoryId).map((u) => [u.categoryId!, u._count._all]));
-    const mine = count(type), other = count(type === "INCOME" ? "EXPENSE" : "INCOME");
-    const used = categories.filter((c) => mine.has(c.id)).sort((a, b) => mine.get(b.id)! - mine.get(a.id)!);
-    const rest = categories.filter((c) => !mine.has(c.id) && !other.has(c.id))
-      // Sin historial: primero las que "parecen" del tipo (Sueldo para ingresos; Supermercado, Transporte... para gastos).
-      .sort((x, y) => Number(looksIncome(y.name) === (type === "INCOME")) - Number(looksIncome(x.name) === (type === "INCOME")));
-    return [...used, ...rest].slice(0, 5);
-  };
   const ownAccounts = accs.filter((a) => a.ownerMemberId === m.id).map(({ id, name, currency }) => ({ id, name, currency }));
+  // "Por pagar" = próximo cobro dentro de los próximos 7 días (o atrasado).
+  const weekEnd = addDays(today(), 7);
+  const quickSubs = subs.map((s) => ({ id: s.id, name: s.name, amount: money(s.amount, s.currency), currency: s.currency, next: fdate(s.nextPaymentDate), due: s.nextPaymentDate <= weekEnd }));
+  const defaultPayAccount = ownAccounts.find((a) => a.id === lastSubPay?.accountId)?.id ?? ownAccounts.find((a) => a.currency === subs[0]?.currency)?.id ?? ownAccounts[0]?.id ?? "";
+  const dayLabel = (d: Date) => { const s = fdate(d); return s === fdate(today()) ? "Hoy" : s.slice(0, 5); };
 
   // Objetivos: la barra de cada miembro se ve para todos; los avisos son del hogar (para todos) y de mi meta (solo para mí).
   const hGoal = goals.find((g) => g.memberId === null);
@@ -113,107 +105,5 @@ export default async function Home() {
     }];
   });
 
-  return (
-    <div>
-      <GoalAlerts alerts={alerts} />
-
-      <HeroCard className="!p-5">
-        {/* 3. Mes y año en números + ojito */}
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-semibold tabular-nums text-white/60">{monthNum}</p>
-          <HideAmountsToggle tone="light" />
-        </div>
-        <p className="-mt-1 text-sm text-white/70">{foreignTotals.length ? "Total ARS" : "Saldo total"}</p>
-        <p className="mt-0.5 text-[36px] font-extrabold leading-none tracking-tight tabular-nums"><Amt>{fmt(total)}</Amt></p>
-        <span className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${balance >= 0n ? "bg-mint/20 text-mint" : "bg-[#FDECEE]/20 text-[#FFB3B6]"}`}>
-          <Icon name="trend" className="h-3.5 w-3.5" />{balance >= 0n ? "+" : ""}<Amt>{fmt(balance)}</Amt> este mes
-        </span>
-        <dl className="mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl bg-white/10 px-3 py-2"><dt className="text-[11px] text-white/60">Disponible para gastar</dt><dd className="font-bold tabular-nums"><Amt>{fmt(disponible)}</Amt></dd></div>
-          <div className="rounded-2xl bg-white/10 px-3 py-2"><dt className="text-[11px] text-white/60">Ahorrado</dt><dd className="font-bold tabular-nums"><Amt>{fmt(ahorrado)}</Amt></dd></div>
-        </dl>
-        <div className="mt-3 border-t border-white/15 pt-2.5">
-          <p className="text-[11px] text-white/60">En las cuentas de cada uno</p>
-          <ul className="mt-1.5 flex flex-wrap gap-1.5">
-            {people.map((p) => (
-              <li key={p.id} className="flex min-w-0 items-baseline gap-2 rounded-full bg-white/10 px-3 py-1 text-sm">
-                <span className="truncate text-white/75">{p.name}</span>
-                <b className="tabular-nums"><Amt>{fmt(p.ars)}</Amt></b>
-                {p.foreign.map(([c, v]) => <span key={c} className="text-xs text-white/60 tabular-nums">· <Amt c={c}>{money(v, c)}</Amt></span>)}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="mt-2.5 flex items-end justify-between gap-3 border-t border-white/15 pt-2.5">
-          <div className="min-w-0 flex-1">
-          {hGoal || mGoals.length ? (
-            <div className="space-y-2.5">
-              {hGoal && (
-                <div>
-                  <p className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs text-white/70">
-                    <span>Objetivo hogar: gastado <b className="text-white tabular-nums"><Amt c={hGoal.currency}>{money(hGoal.spent, hGoal.currency)}</Amt></b> de <span className="tabular-nums"><Amt c={hGoal.currency}>{money(hGoal.amount, hGoal.currency)}</Amt></span></span>
-                    <span className={hGoal.remaining < 0n ? "font-semibold text-[#FFB3B6]" : "text-white/80"}>{hGoal.remaining >= 0n ? "Te queda " : "Te pasaste "}<b className="tabular-nums"><Amt c={hGoal.currency}>{money(hGoal.remaining >= 0n ? hGoal.remaining : -hGoal.remaining, hGoal.currency)}</Amt></b></span>
-                  </p>
-                  <div className="mt-1.5"><GoalBar pct={hGoal.pct} level={hGoal.level} tone="light" label="Objetivo de gastos del hogar" /></div>
-                </div>
-              )}
-              {mGoals.length > 0 && (
-                <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
-                  {mGoals.map((g) => (
-                    <li key={g.id} className="min-w-0">
-                      <p className="truncate text-[11px] text-white/70"><span className="text-white/90">{nameOf.get(g.memberId!)}</span>: <span className="tabular-nums"><Amt c={g.currency}>{money(g.spent, g.currency)}</Amt></span> de <span className="tabular-nums"><Amt c={g.currency}>{money(g.amount, g.currency)}</Amt></span></p>
-                      <div className="mt-1"><GoalBar pct={g.pct} level={g.level} tone="light" size="sm" label={`Objetivo de ${nameOf.get(g.memberId!)}`} /></div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ) : (
-            <Link href="/hogar/objetivo" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-white/20 active:scale-95">
-              <Icon name="target" className="h-3.5 w-3.5" />Definir objetivo
-            </Link>
-          )}
-          </div>
-          {/* 5. Saldo en otras monedas: chiquito, abajo a la derecha, sin etiqueta */}
-          {foreignTotals.length > 0 && (
-            <p className="shrink-0 text-right text-[11px] leading-tight text-white/55 tabular-nums">
-              {foreignTotals.map(([c, v]) => <span key={c} className="block"><Amt c={c} mask={`${shortSymbol(c)} ${MASK}`}>{shortMoney(v, c)}</Amt></span>)}
-            </p>
-          )}
-        </div>
-      </HeroCard>
-
-      <QuickAdd action={quickAdd} accounts={ownAccounts} categories={categories}
-        lastAccount={{ EXPENSE: lastExp?.accountId ?? null, INCOME: lastInc?.accountId ?? null }}
-        top={{ EXPENSE: topFor("EXPENSE"), INCOME: topFor("INCOME") }}
-        income={<>
-          <span className="flex items-center justify-between"><IconTile icon="down" tone="green" size="sm" /><Icon name="plus" className="h-4 w-4 text-muted" /></span>
-          <span className="mt-4 block text-sm text-muted">Ingresos</span>
-          <span className="block text-xl font-extrabold tracking-tight tabular-nums"><Amt>{fmt(inc)}</Amt></span>
-        </>}
-        expense={<>
-          <span className="flex items-center justify-between"><IconTile icon="up" tone="blue" size="sm" /><Icon name="plus" className="h-4 w-4 text-muted" /></span>
-          <span className="mt-4 block text-sm text-muted">Gastos</span>
-          <span className="block text-xl font-extrabold tracking-tight tabular-nums"><Amt>{fmt(exp)}</Amt></span>
-        </>} />
-
-      <div className="card mt-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="font-bold">Gastos del mes vs. ingresos</h2>
-          {usedPct !== null && <span className={`text-sm font-bold ${usedPct > 100 ? "text-neg" : usedPct > 85 ? "text-warn" : "text-pos"}`}>{usedPct}%</span>}
-        </div>
-        {usedPct === null ? (
-          <p className="mt-2 text-sm text-muted">Todavía no hay ingresos este mes{exp > 0n ? <>: llevan gastado <Amt>{fmt(exp)}</Amt></> : ""}.</p>
-        ) : (
-          <>
-            <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-bg" role="progressbar" aria-valuenow={usedPct} aria-valuemin={0} aria-valuemax={100} aria-label="Porcentaje de ingresos gastado">
-              <div className={`h-full rounded-full ${usedPct > 100 ? "bg-neg" : "bg-gradient-to-r from-mint to-pos"}`} style={{ width: `${Math.min(100, usedPct)}%` }} />
-            </div>
-            <p className="mt-3 text-sm text-muted">Gastado <b className="text-text"><Amt>{fmt(exp)}</Amt></b> / <Amt>{fmt(inc)}</Amt></p>
-            <p className="mt-0.5 text-xs text-muted">{balance >= 0n ? <>Van bien: les quedan <Amt>{fmt(balance)}</Amt> este mes 🌿</> : <>Se pasaron <Amt>{fmt(-balance)}</Amt> de lo que entró este mes.</>}</p>
-          </>
-        )}
-      </div>
-    </div>
-  );
+  return <HomeView v={{ alerts, monthNum, foreignTotals, total, balance, disponible, ahorrado, people, hGoal, mGoals, nameOf, quickSubs, ownAccounts, defaultPayAccount, recent, dayLabel, shortSymbol, shortMoney }} />;
 }

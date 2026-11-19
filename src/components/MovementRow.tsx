@@ -20,7 +20,7 @@ export type RowTx = {
  * Fila de movimiento estilo ejemplo: ícono en cuadradito de color, título, quién + cuenta, monto a la derecha.
  * `when` (ej. "Hoy") se muestra en la línea de detalle; `chips` cambia el detalle a chips (vista Movimientos).
  */
-export default function MovementRow({ t, when, chips = false, action }: { t: RowTx; when?: string; chips?: boolean; action?: React.ReactNode }) {
+export default function MovementRow({ t, when, chips = false, action, compact = false }: { t: RowTx; when?: string; chips?: boolean; action?: React.ReactNode; compact?: boolean }) {
   const transfer = t.type === "TRANSFER";
   const v = categoryVisual(t.category?.name, t.type);
   const title = transfer ? (t.description && t.description !== "Transferencia" ? t.description : "Transferencia") : t.description || t.category?.name || "Movimiento";
@@ -32,10 +32,10 @@ export default function MovementRow({ t, when, chips = false, action }: { t: Row
   const fx = transfer && t.toAccount && t.toAccount.currency !== t.account.currency && t.toAmount != null;
 
   return (
-    <div className="flex items-center gap-3.5 py-3.5">
-      <IconTile icon={v.icon} tone={voided ? "gray" : v.tone} />
+    <div className={`flex items-center ${compact ? "gap-3 py-1" : "gap-3.5 py-3.5"}`}>
+      <IconTile icon={v.icon} tone={voided ? "gray" : v.tone} size={compact ? "sm" : "md"} />
       <div className="min-w-0 flex-1">
-        <p className={`truncate text-[15px] font-semibold ${voided ? "text-muted line-through" : ""}`}>{title}</p>
+        <p className={`truncate ${compact ? "text-sm" : "text-[15px]"} font-semibold ${voided ? "text-muted line-through" : ""}`}>{title}</p>
         {chips ? (
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {transfer && <span className="chip bg-[#EAF3FB] text-[#1E6FB8] dark:bg-[#1E88E5]/15 dark:text-[#93C5FD]">Transferencia</span>}
@@ -50,7 +50,7 @@ export default function MovementRow({ t, when, chips = false, action }: { t: Row
         )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-0.5">
-        <span className={`text-[15px] font-bold tabular-nums ${color}`}>{sign}<Amt c={t.account.currency}>{money(t.amount, t.account.currency)}</Amt></span>
+        <span className={`${compact ? "text-sm" : "text-[15px]"} font-bold tabular-nums ${color}`}>{sign}<Amt c={t.account.currency}>{money(t.amount, t.account.currency)}</Amt></span>
         {fx && <span className="text-[11px] text-muted tabular-nums">→ <Amt c={t.toAccount!.currency}>{money(t.toAmount!, t.toAccount!.currency)}</Amt></span>}
         {action}
       </div>
