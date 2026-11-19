@@ -8,12 +8,14 @@ import { accrueYields } from "@/lib/yields";
 import HomeView from "@/components/HomeView";
 import Amt from "@/components/Amt";
 import { addDays } from "@/lib/dates";
+import { categoryVisual } from "@/lib/visuals";
 import { monthGoals } from "@/lib/goals";
 import GoalAlerts, { type GoalAlert } from "@/components/GoalAlerts";
 
 /**
  * Inicio: entra entera en la pantalla del celular, sin scroll (100dvh): tarjeta principal compacta,
- * "Pagar suscripciones" (menú desde abajo) y los últimos 3 movimientos. Los gráficos están en /resumen.
+ * Ingresos/Gastos del mes (tocar = carga rápida) con la barra de % gastado, "Pagar suscripciones"
+ * y los últimos movimientos que entren. Los gráficos están en /resumen.
  */
 export default async function Home() {
   const m = await requireMember();
@@ -25,7 +27,9 @@ export default async function Home() {
   const now = todayAR().slice(0, 7); // mes actual
   const monthStart = new Date(now + "-01T00:00:00Z");
   const nextMonth = new Date(monthStart); nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
-  const [month, balances, vaults, members, accs, goals, subs, lastSubPay, recent] = await Promise.all([
+  const monthAgo = new Date(Date.now() - 30 * 86400000);
+  const lastOf = (type: "INCOME" | "EXPENSE") => db.transaction.findFirst({ where: { householdId: hid, memberId: m.id, type, voidedAt: null }, orderBy: { createdAt: "desc" }, select: { accountId: true } });
+  const [month, balances, vaults, members, accs, goals, subs, lastSubPay, recent, categories, usage, lastExp, lastInc] = await Promise.all([
     // Ingresos y gastos del mes: solo cuentas en ARS (no se mezclan monedas ni se convierte nada).
     db.transaction.groupBy({ by: ["type"], where: { householdId: hid, voidedAt: null, type: { in: ["INCOME", "EXPENSE"] }, account: { currency: "ARS" }, date: { gte: monthStart, lt: nextMonth } }, _sum: { amount: true } }),
     accountBalances(hid),
@@ -39,9 +43,14 @@ export default async function Home() {
     // Cuenta con la que pagué la última suscripción (para el "Pagar con" por defecto).
     db.transaction.findFirst({ where: { householdId: hid, memberId: m.id, subscriptionId: { not: null } }, orderBy: { createdAt: "desc" }, select: { accountId: true } }),
     db.transaction.findMany({
-      where: { householdId: hid, voidedAt: null }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 3,
+      where: { householdId: hid, voidedAt: null }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 4,
       select: { id: true, type: true, amount: true, toAmount: true, description: true, voidedAt: true, date: true, category: { select: { name: true } }, account: { select: { name: true, currency: true } }, toAccount: { select: { name: true, currency: true } }, member: { select: { name: true } } },
     }),
+    // Carga rápida (tocar Ingresos/Gastos): categorías, las más usadas del último mes y la última cuenta usada.
+    db.category.findMany({ where: { householdId: hid }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.transaction.groupBy({ by: ["categoryId", "type"], where: { householdId: hid, voidedAt: null, type: { in: ["INCOME", "EXPENSE"] }, date: { gte: monthAgo } }, _count: { _all: true } }),
+    lastOf("EXPENSE"),
+    lastOf("INCOME"),
   ]);
 
   // Saldos agrupados por moneda: nunca se suman monedas distintas.
@@ -80,6 +89,18 @@ export default async function Home() {
   const inc = month.find((x) => x.type === "INCOME")?._sum.amount ?? 0n;
   const exp = month.find((x) => x.type === "EXPENSE")?._sum.amount ?? 0n;
   const balance = inc - exp;
+  // Top 5 por tipo (más usadas en el último mes); si faltan, se completa con las demás, sin repetir las del otro tipo.
+  const looksIncome = (n: string) => categoryVisual(n).tone === "green";
+  const topFor = (type: "INCOME" | "EXPENSE") => {
+    const count = (t: string) => new Map(usage.filter((u) => u.type === t && u.categoryId).map((u) => [u.categoryId!, u._count._all]));
+    const mine = count(type), other = count(type === "INCOME" ? "EXPENSE" : "INCOME");
+    const used = categories.filter((c) => mine.has(c.id)).sort((a, b) => mine.get(b.id)! - mine.get(a.id)!);
+    const rest = categories.filter((c) => !mine.has(c.id) && !other.has(c.id))
+      // Sin historial: primero las que "parecen" del tipo (Sueldo para ingresos; Supermercado, Transporte... para gastos).
+      .sort((x, y) => Number(looksIncome(y.name) === (type === "INCOME")) - Number(looksIncome(x.name) === (type === "INCOME")));
+    return [...used, ...rest].slice(0, 5);
+  };
+  const quick = { categories, top: { EXPENSE: topFor("EXPENSE"), INCOME: topFor("INCOME") }, lastAccount: { EXPENSE: lastExp?.accountId ?? null, INCOME: lastInc?.accountId ?? null } };
   const ownAccounts = accs.filter((a) => a.ownerMemberId === m.id).map(({ id, name, currency }) => ({ id, name, currency }));
   // "Por pagar" = próximo cobro dentro de los próximos 7 días (o atrasado).
   const weekEnd = addDays(today(), 7);
@@ -105,5 +126,5 @@ export default async function Home() {
     }];
   });
 
-  return <HomeView v={{ alerts, monthNum, foreignTotals, total, balance, disponible, ahorrado, people, hGoal, mGoals, nameOf, quickSubs, ownAccounts, defaultPayAccount, recent, dayLabel, shortSymbol, shortMoney }} />;
+  return <HomeView v={{ inc, exp, quick, alerts, monthNum, foreignTotals, total, balance, disponible, ahorrado, people, hGoal, mGoals, nameOf, quickSubs, ownAccounts, defaultPayAccount, recent, dayLabel, shortSymbol, shortMoney }} />;
 }

@@ -8,13 +8,19 @@ import GoalAlerts, { type GoalAlert } from "./GoalAlerts";
 import SubsQuickPay, { type QuickSub } from "./SubsQuickPay";
 import MovementRow, { type RowTx } from "./MovementRow";
 import NoPageScroll from "./NoPageScroll";
+import FitRows from "./FitRows";
+import QuickAdd from "./QuickAdd";
+import { quickAdd } from "@/lib/quick-actions";
 import { fmt } from "@/lib/util";
 import { money } from "@/lib/currency";
 import { paySubscriptionQuick } from "@/lib/subscription-actions";
 import type { GoalView } from "@/lib/goals";
 
 type Person = { id: string; name: string; ars: bigint; foreign: [string, bigint][] };
+type Opt = { id: string; name: string };
 export type HomeData = {
+  inc: bigint; exp: bigint;
+  quick: { categories: Opt[]; top: { INCOME: Opt[]; EXPENSE: Opt[] }; lastAccount: { INCOME: string | null; EXPENSE: string | null } };
   alerts: GoalAlert[]; monthNum: string; foreignTotals: [string, bigint][]; total: bigint; balance: bigint; disponible: bigint; ahorrado: bigint;
   people: Person[]; hGoal: GoalView | undefined; mGoals: GoalView[]; nameOf: Map<string, string>;
   quickSubs: QuickSub[]; ownAccounts: { id: string; name: string; currency: string }[]; defaultPayAccount: string;
@@ -22,28 +28,35 @@ export type HomeData = {
 };
 
 export default function HomeView({ v, payAction = paySubscriptionQuick }: { v: HomeData; payAction?: typeof paySubscriptionQuick }) {
-  const { alerts, monthNum, foreignTotals, total, balance, disponible, ahorrado, people, hGoal, mGoals, nameOf, quickSubs, ownAccounts, defaultPayAccount, recent, dayLabel, shortSymbol, shortMoney } = v;
+  const { inc, exp, quick, alerts, monthNum, foreignTotals, total, balance, disponible, ahorrado, people, hGoal, mGoals, nameOf, quickSubs, ownAccounts, defaultPayAccount, recent, dayLabel, shortSymbol, shortMoney } = v;
+  // % gastado de lo que entró este mes. Sin ingresos y con gastos: 100%.
+  const pct = inc > 0n ? Number((exp * 100n) / inc) : exp > 0n ? 100 : 0;
+  const barColor = pct > 100 ? "bg-neg" : pct > 85 ? "bg-[#F97316]" : pct > 60 ? "bg-warn" : "bg-pos";
+  const spendText = inc === 0n
+    ? (exp > 0n ? "Sin ingresos este mes" : "Sin ingresos ni gastos este mes")
+    : pct > 100 ? `Te pasaste ${pct - 100}% de tus ingresos` : `Gastaste ${pct}% de lo que ingresaste · Te queda ${100 - pct}%`;
+
   return (
     <div className="-mb-32 -mt-6 flex h-[100dvh] flex-col gap-2 overflow-hidden pb-[calc(5.25rem+env(safe-area-inset-bottom))] pt-2.5 md:m-0 md:h-auto md:gap-4 md:overflow-visible md:p-0">
       <NoPageScroll />
       <GoalAlerts alerts={alerts} />
 
-      <HeroCard className="shrink-0 !rounded-[20px] !p-3.5">
+      <HeroCard className="shrink-0 !rounded-[20px] !p-3">
         {/* 3. Mes y año en números + ojito */}
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold tabular-nums text-white/60">{monthNum}</p>
           <HideAmountsToggle tone="light" className="!h-7 !w-7" />
         </div>
         <p className="-mt-1 text-xs text-white/70">{foreignTotals.length ? "Total ARS" : "Saldo total"}</p>
-        <p className="text-[27px] font-extrabold leading-none tracking-tight tabular-nums"><Amt>{fmt(total)}</Amt></p>
+        <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums"><Amt>{fmt(total)}</Amt></p>
         <span className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${balance >= 0n ? "bg-mint/20 text-mint" : "bg-[#FDECEE]/20 text-[#FFB3B6]"}`}>
           <Icon name="trend" className="h-3 w-3" />{balance >= 0n ? "+" : ""}<Amt>{fmt(balance)}</Amt> este mes
         </span>
-        <dl className="mt-2 grid grid-cols-2 gap-2">
+        <dl className="mt-1.5 grid grid-cols-2 gap-2">
           <div className="rounded-xl bg-white/10 px-2.5 py-1.5"><dt className="text-[10px] text-white/60">Disponible para gastar</dt><dd className="text-sm font-bold tabular-nums"><Amt>{fmt(disponible)}</Amt></dd></div>
           <div className="rounded-xl bg-white/10 px-2.5 py-1.5"><dt className="text-[10px] text-white/60">Ahorrado</dt><dd className="text-sm font-bold tabular-nums"><Amt>{fmt(ahorrado)}</Amt></dd></div>
         </dl>
-        <div className="mt-2 border-t border-white/15 pt-2">
+        <div className="mt-1.5 border-t border-white/15 pt-1.5">
           <p className="text-[10px] text-white/60">En las cuentas de cada uno</p>
           <ul className="mt-1 flex flex-wrap gap-1.5">
             {people.map((p) => (
@@ -55,7 +68,7 @@ export default function HomeView({ v, payAction = paySubscriptionQuick }: { v: H
             ))}
           </ul>
         </div>
-        <div className="mt-2 flex items-end justify-between gap-3 border-t border-white/15 pt-2">
+        <div className="mt-1.5 flex items-end justify-between gap-3 border-t border-white/15 pt-1.5">
           <div className="min-w-0 flex-1">
           {hGoal || mGoals.length ? (
             <div className="space-y-1.5">
@@ -94,18 +107,33 @@ export default function HomeView({ v, payAction = paySubscriptionQuick }: { v: H
         </div>
       </HeroCard>
 
+      {/* Ingresos / Gastos del mes (solo cuentas en ARS, sin transferencias). Tocar = carga rápida. */}
+      <div className="shrink-0">
+        <QuickAdd compact action={quickAdd} accounts={ownAccounts} categories={quick.categories} lastAccount={quick.lastAccount} top={quick.top}
+          income={<>
+            <span className="flex items-center gap-1 text-[11px] font-semibold leading-tight text-pos"><Icon name="down" className="h-3 w-3" />Ingresos<Icon name="plus" className="ml-auto h-3.5 w-3.5 text-muted" /></span>
+            <span className="block text-[15px] font-extrabold leading-tight tracking-tight tabular-nums"><Amt>{fmt(inc)}</Amt></span>
+          </>}
+          expense={<>
+            <span className="flex items-center gap-1 text-[11px] font-semibold leading-tight text-neg"><Icon name="up" className="h-3 w-3" />Gastos<Icon name="plus" className="ml-auto h-3.5 w-3.5 text-muted" /></span>
+            <span className="block text-[15px] font-extrabold leading-tight tracking-tight tabular-nums"><Amt>{fmt(exp)}</Amt></span>
+          </>} />
+        <div className="mt-1.5 px-1">
+          <p className={`truncate text-[11px] leading-tight ${pct > 100 ? "font-semibold text-neg" : "text-muted"}`}>{spendText}</p>
+          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line" role="progressbar" aria-valuenow={Math.min(pct, 100)} aria-valuemin={0} aria-valuemax={100} aria-label="Porcentaje de los ingresos gastado">
+            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }} />
+          </div>
+        </div>
+      </div>
+
       <SubsQuickPay subs={quickSubs} accounts={ownAccounts} defaultAccountId={defaultPayAccount} action={payAction} />
 
-      {/* Últimos movimientos: máximo 3; si la pantalla es muy baja, se recorta esta sección (la página no scrollea). */}
-      <section className="card flex min-h-0 shrink flex-col !py-2.5">
-        <div className="flex shrink-0 items-center justify-between">
-          <h2 className="text-sm font-bold">Últimos movimientos</h2>
-          <Link href="/movimientos" className="text-xs font-semibold text-primary">Ver todos →</Link>
-        </div>
-        {recent.length === 0
-          ? <p className="py-3 text-center text-sm text-muted">Todavía no hay movimientos.</p>
-          : <ul className="min-h-0 divide-y divide-line overflow-hidden">{recent.map((t) => <li key={t.id}><MovementRow t={t} when={dayLabel(t.date)} compact /></li>)}</ul>}
-      </section>
+      {/* Últimos movimientos: los que entren en la pantalla (máx. 4). Si no entran 2, la sección no se muestra. */}
+      {recent.length > 0 && (
+        <FitRows min={2} header={<div className="flex items-center justify-between"><h2 className="text-sm font-bold">Últimos movimientos</h2><Link href="/movimientos" className="text-xs font-semibold text-primary">Ver todos →</Link></div>}>
+          {recent.map((t) => <MovementRow key={t.id} t={t} when={dayLabel(t.date)} compact />)}
+        </FitRows>
+      )}
     </div>
   );
 }

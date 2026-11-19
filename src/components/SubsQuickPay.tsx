@@ -47,7 +47,7 @@ export default function SubsQuickPay({ subs, accounts, defaultAccountId, action 
   return (
     <>
       <button type="button" onClick={() => { setError(null); ref.current?.showModal(); }} aria-haspopup="dialog"
-        className="card flex w-full shrink-0 items-center gap-3 !py-2.5 text-left transition active:scale-[.98]">
+        className="card flex w-full shrink-0 items-center gap-3 !py-1.5 text-left transition active:scale-[.98]">
         <IconTile icon="repeat" tone={due ? "blue" : "green"} size="sm" />
         <span className="min-w-0 flex-1">
           {due

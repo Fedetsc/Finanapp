@@ -19,6 +19,7 @@ type Props = {
   top: Record<Kind, Opt[]>; // 4-5 categorías más usadas en el último mes
   categories: Opt[];
   action: (fd: FormData) => Promise<QuickResult>;
+  compact?: boolean; // cajitas chicas (Inicio sin scroll)
 };
 
 const TEXT = {
@@ -28,7 +29,7 @@ const TEXT = {
 const valid = (v: string) => { try { return toCents(v) > 0n; } catch { return false; } };
 
 /** Cards Ingresos/Gastos de Inicio: cada una abre un menú desde abajo para cargar el movimiento sin salir de Inicio. */
-export default function QuickAdd({ income, expense, accounts, lastAccount, top, categories, action }: Props) {
+export default function QuickAdd({ income, expense, accounts, lastAccount, top, categories, action, compact = false }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -82,11 +83,11 @@ export default function QuickAdd({ income, expense, accounts, lastAccount, top, 
 
   const acc = accounts.find((a) => a.id === accountId);
   const shown = all ? categories : top[kind];
-  const card = "card w-full text-left transition duration-150 hover:ring-2 hover:ring-line active:scale-[.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  const card = `card w-full text-left ${compact ? "!rounded-2xl !p-2" : ""} transition duration-150 hover:ring-2 hover:ring-line active:scale-[.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`;
 
   return (
     <>
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      <div className={compact ? "grid grid-cols-2 gap-2" : "mt-4 grid grid-cols-2 gap-4"}>
         <button type="button" onClick={() => open("INCOME")} className={card} aria-haspopup="dialog" aria-label="Añadir ingreso">{income}</button>
         <button type="button" onClick={() => open("EXPENSE")} className={card} aria-haspopup="dialog" aria-label="Añadir gasto">{expense}</button>
       </div>
